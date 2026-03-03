@@ -1,0 +1,4941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Racer Analytics Studio</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Tailwind (Play CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            carbon: {
+              900: "#020308",
+              800: "#050816",
+              700: "#0b1120"
+            },
+            racing: {
+              blue: "#1d4ed8",
+              blueSoft: "#0b1638",
+              cyan: "#22d3ee"
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Grid.js for rich tables -->
+  <link href="https://cdn.jsdelivr.net/npm/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/gridjs/dist/gridjs.umd.js"></script>
+
+  <style>
+    body {
+      background: radial-gradient(circle at top, #020617 0, #020308 55%, #000 100%);
+      color: #e5e7eb;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar {
+      height: 4px;
+      width: 4px;
+    }
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+      background-color: #1f2937;
+      border-radius: 999px;
+    }
+    .scrollbar-thin::-webkit-scrollbar-track {
+      background-color: transparent;
+    }
+
+    .gridjs-container {
+      color: #e5e7eb;
+    }
+    .gridjs-th, .gridjs-td {
+      background-color: transparent !important;
+      border-color: #111827 !important;
+      font-size: 0.75rem;
+      white-space: nowrap;
+    }
+    .gridjs-tr:hover .gridjs-td {
+      background-color: #020617 !important;
+    }
+    .gridjs-table {
+      border-radius: 0.5rem;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body class="min-h-screen text-slate-100">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+  <!-- Top bar -->
+  <header class="flex items-center justify-between gap-4">
+    <div class="space-y-2">
+      <div class="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-400">
+        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900/80 border border-slate-700">
+          <span class="w-1.5 h-1.5 rounded-full bg-racing-cyan"></span>
+          Racer Analytics Studio
+        </span>
+        <span class="text-slate-500">Client-side telemetry</span>
+      </div>
+      <h1 class="text-xl sm:text-2xl font-semibold tracking-wide">
+        Carbon<span class="text-racing-blue">Line</span> Performance Dashboard
+      </h1>
+      <p class="text-xs sm:text-sm text-slate-400 max-w-xl">
+        Drop in a <span class="font-mono text-slate-200">racer_profile.json</span> and explore placements, track &amp; car
+        performance, combo analytics and time-based activity in a race telemetry style UI.
+      </p>
+    </div>
+    <div class="flex items-center gap-3">
+      <div class="hidden sm:flex flex-col items-end text-xs text-slate-400">
+        <span>Rendering locally</span>
+        <span class="font-mono text-[10px] text-slate-500">No backend · JSON in · insights out</span>
+      </div>
+      <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-racing-blue via-racing-cyan to-slate-900 flex items-center justify-center text-lg font-bold text-slate-900 shadow-lg">
+        R
+      </div>
+    </div>
+  </header>
+
+  <!-- Upload strip + quick status -->
+  <section id="uploadSection" class="grid lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)] gap-4">
+    <!-- Upload panel -->
+    <div id="uploadBox"
+         class="group relative rounded-2xl border border-dashed border-slate-700 bg-slate-950/60 px-4 py-4 cursor-pointer flex flex-col sm:flex-row gap-4 sm:items-center">
+      <div class="flex items-center gap-4">
+        <div class="w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center text-racing-cyan text-lg">
+          ⬆
+        </div>
+        <div>
+          <p class="text-sm font-medium text-slate-100">
+            Drag &amp; drop your <span class="font-mono">racer_profile.json</span>
+          </p>
+          <p class="text-xs text-slate-400">
+            Or <span class="text-racing-cyan">click to browse</span>. Data stays in your browser.
+          </p>
+        </div>
+      </div>
+      <div class="flex-1 flex flex-wrap sm:justify-end gap-3 items-center">
+        <button id="uploadButton"
+                class="inline-flex items-center gap-2 rounded-full border border-racing-blue bg-racing-blue/20 px-4 py-1.5 text-xs font-medium text-racing-cyan hover:bg-racing-blue/30">
+          <span class="w-1.5 h-1.5 rounded-full bg-racing-cyan"></span>
+          Upload racer_profile.json
+        </button>
+        <span class="text-[10px] font-mono text-slate-500">
+          Required keys: racer_id, races[]
+        </span>
+      </div>
+      <input id="fileInput" type="file" accept=".json,application/json" class="hidden" />
+    </div>
+
+    <!-- Live status -->
+    <div class="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3 text-xs space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="uppercase tracking-[0.18em] text-slate-500 text-[10px]">Current Racer</span>
+        <span id="racerIdChip" class="inline-flex items-center gap-2 rounded-full border border-slate-700 px-2 py-0.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
+          <span class="font-mono text-[11px] text-slate-300" id="racerIdText">No profile loaded</span>
+        </span>
+      </div>
+      <div class="grid grid-cols-3 gap-2">
+        <div class="flex flex-col gap-1">
+          <span class="text-[10px] uppercase tracking-[0.18em] text-slate-500">Races</span>
+          <span id="statusTotalRaces" class="font-mono text-sm text-slate-100">-</span>
+        </div>
+        <div class="flex flex-col gap-1">
+          <span class="text-[10px] uppercase tracking-[0.18em] text-slate-500">Tracks</span>
+          <span id="statusTrackCount" class="font-mono text-sm text-slate-100">-</span>
+        </div>
+        <div class="flex flex-col gap-1">
+          <span class="text-[10px] uppercase tracking-[0.18em] text-slate-500">Cars</span>
+          <span id="statusCarCount" class="font-mono text-sm text-slate-100">-</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Dashboard main -->
+  <section id="dashboard" class="hidden space-y-5">
+    <!-- Global filters -->
+    <section class="rounded-2xl border border-slate-800 bg-carbon-800/70 px-4 py-3 flex flex-wrap gap-3 items-end">
+      <div class="flex flex-col gap-1 min-w-[160px]">
+        <label for="filterTrack" class="text-[10px] uppercase tracking-[0.18em] text-slate-500">Track</label>
+        <select id="filterTrack" class="w-full rounded-full border border-slate-700 bg-carbon-900 px-3 py-1.5 text-xs">
+          <option value="">All tracks</option>
+        </select>
+      </div>
+      <div class="flex flex-col gap-1 min-w-[160px]">
+        <label for="filterCar" class="text-[10px] uppercase tracking-[0.18em] text-slate-500">Car</label>
+        <select id="filterCar" class="w-full rounded-full border border-slate-700 bg-carbon-900 px-3 py-1.5 text-xs">
+          <option value="">All cars</option>
+        </select>
+      </div>
+      <div class="flex flex-col gap-1 min-w-[140px]">
+        <label for="filterDateFrom" class="text-[10px] uppercase tracking-[0.18em] text-slate-500">From</label>
+        <input id="filterDateFrom" type="date" class="w-full rounded-full border border-slate-700 bg-carbon-900 px-3 py-1.5 text-xs" />
+      </div>
+      <div class="flex flex-col gap-1 min-w-[140px]">
+        <label for="filterDateTo" class="text-[10px] uppercase tracking-[0.18em] text-slate-500">To</label>
+        <input id="filterDateTo" type="date" class="w-full rounded-full border border-slate-700 bg-carbon-900 px-3 py-1.5 text-xs" />
+      </div>
+      <div class="ml-auto flex items-center gap-2">
+        <button id="resetFiltersBtn"
+                class="rounded-full border border-slate-700 bg-carbon-900 px-3 py-1.5 text-[11px] text-slate-300">
+          Reset filters
+        </button>
+      </div>
+    </section>
+
+    <!-- Summary row -->
+    <section class="grid lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1.1fr)] gap-4">
+      <!-- Summary stats -->
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3">
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Session Summary</h2>
+            <p class="text-[11px] text-slate-500">Key metrics for current filters</p>
+          </div>
+        </div>
+        <div id="summaryCards" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs"></div>
+      </div>
+
+      <!-- Placement mini-grid -->
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Placement Snapshot</h2>
+        </div>
+        <div class="h-24">
+          <canvas id="miniPlacementChart"></canvas>
+        </div>
+        <div class="grid grid-cols-3 gap-2 text-[11px] mt-1">
+          <div class="flex flex-col">
+            <span class="text-slate-500 uppercase tracking-[0.16em] text-[10px]">Best</span>
+            <span id="miniBest" class="font-mono text-sm">-</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-slate-500 uppercase tracking-[0.16em] text-[10px]">Average</span>
+            <span id="miniAvg" class="font-mono text-sm">-</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-slate-500 uppercase tracking-[0.16em] text-[10px]">Worst</span>
+            <span id="miniWorst" class="font-mono text-sm">-</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Placement + time series -->
+    <section class="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1.5fr)] gap-4">
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400">Placement Curve</h3>
+            <p class="text-[11px] text-slate-500">Distribution + cumulative % per finishing position</p>
+          </div>
+        </div>
+        <div class="h-56">
+          <canvas id="placementChart"></canvas>
+        </div>
+        <div class="mt-2 overflow-x-auto scrollbar-thin" id="placementTableWrapper"></div>
+      </div>
+
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400">Race Activity</h3>
+            <p class="text-[11px] text-slate-500">Races per day, most active month &amp; heatmap</p>
+          </div>
+        </div>
+        <div class="h-40">
+          <canvas id="activityChart"></canvas>
+        </div>
+        <div class="mt-3 text-[11px] text-slate-400">
+          <span>Most active month: </span>
+          <span id="mostActiveMonth" class="font-mono text-slate-200"></span>
+        </div>
+        <div class="mt-2">
+          <div class="text-[11px] text-slate-500 mb-1">Heatmap</div>
+          <div class="heatmap-grid flex flex-wrap gap-[3px]" id="activityHeatmap"></div>
+          <div class="heatmap-legend flex items-center gap-2 mt-1 text-[11px] text-slate-500">
+            <span>Low</span>
+            <span class="heat-cell" data-level="1"></span>
+            <span class="heat-cell" data-level="2"></span>
+            <span class="heat-cell" data-level="3"></span>
+            <span class="heat-cell" data-level="4"></span>
+            <span>High</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Track & car performance wall -->
+    <section class="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1.5fr)] gap-4">
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between mb-1">
+          <div>
+            <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400">Tracks · Avg Placement</h3>
+            <p class="text-[11px] text-slate-500">Lower is better · sorted best to worst</p>
+          </div>
+        </div>
+        <div id="avgByTrackTable" class="scrollbar-thin max-h-64 overflow-y-auto"></div>
+      </div>
+
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between mb-1">
+          <div>
+            <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400">Cars · Avg Placement</h3>
+            <p class="text-[11px] text-slate-500">Lower is better · sorted best to worst</p>
+          </div>
+        </div>
+        <div id="avgByCarTable" class="scrollbar-thin max-h-64 overflow-y-auto"></div>
+      </div>
+    </section>
+
+    <!-- Track + car breakdowns in columns -->
+    <section class="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1.5fr)] gap-4">
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between mb-1">
+          <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400">Track Breakdown</h3>
+          <span class="text-[11px] text-slate-500">Click a track to drill in</span>
+        </div>
+        <div id="trackBreakdown" class="scrollbar-thin max-h-80 overflow-y-auto space-y-2"></div>
+      </div>
+
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between mb-1">
+          <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400">Car Breakdown</h3>
+          <span class="text-[11px] text-slate-500">Click a car to drill in</span>
+        </div>
+        <div id="carBreakdown" class="scrollbar-thin max-h-80 overflow-y-auto space-y-2"></div>
+      </div>
+    </section>
+
+    <!-- Combo analytics + full log -->
+    <section class="grid lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1.7fr)] gap-4">
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3 flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400">Track + Car Combos</h3>
+            <p class="text-[11px] text-slate-500">Sorted by usage · sortable</p>
+          </div>
+        </div>
+        <div id="comboAnalytics" class="scrollbar-thin max-h-80 overflow-auto text-[11px]"></div>
+      </div>
+
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3 flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400">Full Race Log</h3>
+            <p class="text-[11px] text-slate-500">Searchable, sortable, paginated</p>
+          </div>
+          <div class="flex items-center gap-2 text-[11px] text-slate-500">
+            <span class="hidden sm:inline">Search</span>
+            <input id="logSearchInput"
+                   type="search"
+                   placeholder="Track, car, weather, ID..."
+                   class="rounded-full border border-slate-700 bg-carbon-900 px-3 py-1 text-[11px] min-w-[160px]" />
+          </div>
+        </div>
+        <div id="raceLogTableWrapper" class="scrollbar-thin max-h-96 overflow-auto text-[11px]"></div>
+        <div id="logPagination" class="flex items-center justify-between text-[11px] text-slate-500"></div>
+      </div>
+    </section>
+  </section>
+</div>
+
+<script>
+  let allRaces = [];
+  let rawProfile = null;
+
+  // reuse global filters definition
+  Object.assign(filters, { track: "", car: "", from: "", to: "" });
+
+  const chartState = {
+    placementChart: null,
+    activityChart: null,
+    miniPlacementChart: null
+  };
+
+  const raceLogState = {
+    sortKey: "race_datetime",
+    sortDir: "desc",
+    page: 1,
+    pageSize: 25,
+    search: ""
+  };
+
+  const $ = (id) => document.getElementById(id);
+
+  function formatDate(dateStr) {
+    if (!dateStr) return "";
+    const [d] = dateStr.split(" ");
+    return d;
+  }
+
+  function monthKey(dateStr) {
+    const d = new Date(dateStr.replace(" ", "T"));
+    if (Number.isNaN(d.getTime())) return "";
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`;
+  }
+
+  function niceMonthLabel(key) {
+    if (!key) return "—";
+    const [y, m] = key.split("-");
+    const dt = new Date(Number(y), Number(m) - 1, 1);
+    return dt.toLocaleString(undefined, { month: "short", year: "numeric" });
+  }
+
+  function getFilteredRaces() {
+    return allRaces.filter((r) => {
+      if (filters.track && r.track !== filters.track) return false;
+      if (filters.car && r.vehicle_name !== filters.car) return false;
+
+      const dateOnly = r.race_datetime.split(" ")[0];
+      if (filters.from && dateOnly < filters.from) return false;
+      if (filters.to && dateOnly > filters.to) return false;
+      return true;
+    });
+  }
+
+  function aggregateBasics(races) {
+    const total = races.length;
+    if (!total) {
+      return {
+        total,
+        avgPlacement: 0,
+        best: null,
+        worst: null,
+        placements: {},
+        tracks: {},
+        cars: {},
+        combos: {},
+        weather: {},
+        days: {},
+        combosDetail: {}
+      };
+    }
+
+    let sumPos = 0;
+    let best = Infinity;
+    let worst = -Infinity;
+    const placements = {};
+    const tracks = {};
+    const cars = {};
+    const combos = {};
+    const combosDetail = {};
+    const weather = {};
+    const days = {};
+
+    for (const r of races) {
+      const pos = Number(r.position);
+      sumPos += pos;
+      if (pos < best) best = pos;
+      if (pos > worst) worst = pos;
+
+      placements[pos] = (placements[pos] || 0) + 1;
+      tracks[r.track] = (tracks[r.track] || 0) + 1;
+      cars[r.vehicle_name] = (cars[r.vehicle_name] || 0) + 1;
+      weather[r.weather] = (weather[r.weather] || 0) + 1;
+
+      const comboKey = `${r.track}__${r.vehicle_name}`;
+      combos[comboKey] = (combos[comboKey] || 0) + 1;
+      if (!combosDetail[comboKey]) {
+        combosDetail[comboKey] = {
+          track: r.track,
+          car: r.vehicle_name,
+          count: 0,
+          sumPos: 0,
+          best: Infinity
+        };
+      }
+      const cd = combosDetail[comboKey];
+      cd.count += 1;
+      cd.sumPos += pos;
+      if (pos < cd.best) cd.best = pos;
+
+      const day = r.race_datetime.split(" ")[0];
+      days[day] = (days[day] || 0) + 1;
+    }
+
+    return {
+      total,
+      avgPlacement: sumPos / total,
+      best,
+      worst,
+      placements,
+      tracks,
+      cars,
+      combos,
+      weather,
+      days,
+      combosDetail
+    };
+  }
+
+  function topKey(map) {
+    const entries = Object.entries(map || {});
+    if (!entries.length) return null;
+    entries.sort((a, b) => b[1] - a[1]);
+    return entries[0][0];
+  }
+
+  function renderSummary(races) {
+    const basics = aggregateBasics(races);
+    const summaryEl = $("summaryCards");
+    if (!basics.total) {
+      summaryEl.innerHTML = '<div class="text-xs text-slate-500">No races match current filters.</div>';
+      $("miniBest").textContent = "-";
+      $("miniAvg").textContent = "-";
+      $("miniWorst").textContent = "-";
+      return;
+    }
+
+    const mostTrack = topKey(basics.tracks) || "—";
+    const mostCar = topKey(basics.cars) || "—";
+    const mostWeather = topKey(basics.weather) || "—";
+
+    let topComboLabel = "—";
+    if (Object.keys(basics.combos).length) {
+      const [comboKey] = Object.entries(basics.combos).sort((a, b) => b[1] - a[1])[0];
+      const [track, car] = comboKey.split("__");
+      topComboLabel = `${track} + ${car}`;
+    }
+
+    const mostDay = topKey(basics.days) || "—";
+
+    summaryEl.innerHTML = `
+      <article class="flex flex-col gap-1">
+        <h4 class="summary-label">Total Races</h4>
+        <div class="summary-value-row">
+          <span class="summary-value font-mono">${basics.total.toLocaleString()}</span>
+          <span class="summary-subtext">Across current filters</span>
+        </div>
+      </article>
+      <article class="flex flex-col gap-1">
+        <h4 class="summary-label">Average Placement</h4>
+        <div class="summary-value-row">
+          <span class="summary-value">${basics.avgPlacement.toFixed(2)}</span>
+          <span class="summary-subtext">Best ${basics.best ?? "—"} · Worst ${basics.worst ?? "—"}</span>
+        </div>
+      </article>
+      <article class="flex flex-col gap-1">
+        <h4 class="summary-label">Most Raced Track</h4>
+        <div class="summary-value-row">
+          <span class="summary-value truncate" title="${mostTrack}">${mostTrack}</span>
+          <span class="summary-subtext">Usage leader</span>
+        </div>
+      </article>
+      <article class="flex flex-col gap-1">
+        <h4 class="summary-label">Most Raced Car</h4>
+        <div class="summary-value-row">
+          <span class="summary-value truncate" title="${mostCar}">${mostCar}</span>
+          <span class="summary-subtext">Primary choice</span>
+        </div>
+      </article>
+      <article class="flex flex-col gap-1">
+        <h4 class="summary-label">Top Track + Car</h4>
+        <div class="summary-value-row">
+          <span class="summary-value truncate" title="${topComboLabel}">${topComboLabel}</span>
+          <span class="summary-subtext">Most used combo</span>
+        </div>
+      </article>
+      <article class="flex flex-col gap-1">
+        <h4 class="summary-label">Most Common Weather</h4>
+        <div class="summary-value-row">
+          <span class="summary-value">${mostWeather}</span>
+          <span class="summary-subtext">Typical condition</span>
+        </div>
+      </article>
+      <article class="flex flex-col gap-1">
+        <h4 class="summary-label">Day with Most Races</h4>
+        <div class="summary-value-row">
+          <span class="summary-value font-mono">${mostDay}</span>
+          <span class="summary-subtext">Peak racing day</span>
+        </div>
+      </article>
+    `;
+
+    $("miniBest").textContent = basics.best ?? "-";
+    $("miniAvg").textContent = basics.avgPlacement.toFixed(2);
+    $("miniWorst").textContent = basics.worst ?? "-";
+
+    const entries = Object.entries(basics.placements)
+      .map(([pos, count]) => ({ pos: Number(pos), count }))
+      .sort((a, b) => a.pos - b.pos);
+    const labels = entries.map((e) => e.pos);
+    const counts = entries.map((e) => e.count);
+
+    const ctxMini = $("miniPlacementChart").getContext("2d");
+    if (!chartState.miniPlacementChart) {
+      chartState.miniPlacementChart = new Chart(ctxMini, {
+        type: "bar",
+        data: { labels, datasets: [{ data: counts, backgroundColor: "#1d4ed8", borderRadius: 4 }] },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: "#9ca3af", font: { size: 9 } } },
+            y: { grid: { display: false }, ticks: { display: false } }
+          }
+        }
+      });
+    } else {
+      chartState.miniPlacementChart.data.labels = labels;
+      chartState.miniPlacementChart.data.datasets[0].data = counts;
+      chartState.miniPlacementChart.update();
+    }
+  }
+
+  function renderPlacementAnalytics(races) {
+    const wrapper = $("placementTableWrapper");
+    const basics = aggregateBasics(races);
+
+    if (!basics.total) {
+      wrapper.innerHTML = '<div class="text-xs text-slate-500">No races to display.</div>';
+      if (chartState.placementChart) {
+        chartState.placementChart.data.labels = [];
+        chartState.placementChart.data.datasets[0].data = [];
+        chartState.placementChart.update();
+      }
+      return;
+    }
+
+    const entries = Object.entries(basics.placements)
+      .map(([pos, count]) => ({ pos: Number(pos), count }))
+      .sort((a, b) => a.pos - b.pos);
+    const labels = entries.map((e) => e.pos);
+    const counts = entries.map((e) => e.count);
+
+    let running = 0;
+    const cumulative = counts.map((c) => {
+      running += c;
+      return (running / basics.total) * 100;
+    });
+
+    const ctx = $("placementChart").getContext("2d");
+    if (!chartState.placementChart) {
+      chartState.placementChart = new Chart(ctx, {
+        data: {
+          labels,
+          datasets: [
+            {
+              type: "bar",
+              label: "Finishes",
+              data: counts,
+              backgroundColor: "#1d4ed8",
+              borderRadius: 5,
+              maxBarThickness: 26,
+              yAxisID: "y"
+            },
+            {
+              type: "line",
+              label: "Cumulative %",
+              data: cumulative,
+              borderColor: "#38bdf8",
+              backgroundColor: "rgba(56,189,248,0.15)",
+              tension: 0.3,
+              borderWidth: 2,
+              pointRadius: 2,
+              yAxisID: "y1"
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, labels: { color: "#9ca3af", boxWidth: 12 } },
+            tooltip: {
+              mode: "index",
+              intersect: false,
+              callbacks: {
+                label(ctx) {
+                  if (ctx.datasetIndex === 0) {
+                    const count = ctx.parsed.y || 0;
+                    const pct = ((count / basics.total) * 100).toFixed(1);
+                    return `Finishes: ${count} (${pct}%)`;
+                  }
+                  return `Cumulative: ${ctx.parsed.y.toFixed(1)}%`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: "#9ca3af", font: { size: 11 } }
+            },
+            y: {
+              position: "left",
+              grid: { color: "rgba(31,41,55,0.6)" },
+              ticks: { color: "#9ca3af", font: { size: 11 }, precision: 0 }
+            },
+            y1: {
+              position: "right",
+              grid: { display: false },
+              ticks: {
+                color: "#9ca3af",
+                font: { size: 11 },
+                callback: (v) => `${v}%`
+              },
+              min: 0,
+              max: 100
+            }
+          }
+        }
+      });
+    } else {
+      chartState.placementChart.data.labels = labels;
+      chartState.placementChart.data.datasets[0].data = counts;
+      chartState.placementChart.data.datasets[1].data = cumulative;
+      chartState.placementChart.update();
+    }
+
+    const rows = entries
+      .map((e, idx) => {
+        const pct = ((e.count / basics.total) * 100).toFixed(1);
+        const cum = cumulative[idx].toFixed(1);
+        return `<tr>
+          <td class="text-center">${e.pos}</td>
+          <td class="text-right font-mono">${e.count.toLocaleString()}</td>
+          <td class="text-right font-mono">${pct}%</td>
+          <td class="text-right font-mono">${cum}%</td>
+        </tr>`;
+      })
+      .join("");
+
+    wrapper.innerHTML = `
+      <table class="w-full text-[11px]">
+        <thead>
+          <tr>
+            <th class="text-center">Pos</th>
+            <th class="text-right">Count</th>
+            <th class="text-right">Percent</th>
+            <th class="text-right">Cumulative</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  function renderAvgPlacementTables(races) {
+    const byTrack = {};
+    const byCar = {};
+
+    for (const r of races) {
+      const pos = Number(r.position);
+      if (!byTrack[r.track]) byTrack[r.track] = { name: r.track, count: 0, sum: 0 };
+      if (!byCar[r.vehicle_name]) byCar[r.vehicle_name] = { name: r.vehicle_name, count: 0, sum: 0 };
+      byTrack[r.track].count += 1;
+      byTrack[r.track].sum += pos;
+      byCar[r.vehicle_name].count += 1;
+      byCar[r.vehicle_name].sum += pos;
+    }
+
+    const tracksArr = Object.values(byTrack).map((t) => ({ ...t, avg: t.sum / t.count }));
+    const carsArr = Object.values(byCar).map((t) => ({ ...t, avg: t.sum / t.count }));
+    tracksArr.sort((a, b) => a.avg - b.avg);
+    carsArr.sort((a, b) => a.avg - b.avg);
+
+    const allAvgs = [...tracksArr.map((t) => t.avg), ...carsArr.map((c) => c.avg)];
+    const maxAvg = allAvgs.length ? Math.max(...allAvgs) : 1;
+
+    const trackRows = tracksArr
+      .map((t) => {
+        const score = 1 - t.avg / maxAvg;
+        const width = Math.round(15 + score * 85);
+        return `<tr>
+          <td class="pr-2">${t.name}</td>
+          <td>
+            <div class="flex items-center gap-2 min-w-[140px]">
+              <div class="flex-1 bg-carbon-900 rounded-full overflow-hidden border border-slate-900">
+                <div class="h-[6px]" style="width:${width}%;background:#2563eb;"></div>
+              </div>
+              <span class="font-mono text-[11px] text-slate-200">${t.avg.toFixed(2)}</span>
+            </div>
+          </td>
+          <td class="text-right font-mono">${t.count.toLocaleString()}</td>
+        </tr>`;
+      })
+      .join("");
+
+    const carRows = carsArr
+      .map((t) => {
+        const score = 1 - t.avg / maxAvg;
+        const width = Math.round(15 + score * 85);
+        return `<tr>
+          <td class="pr-2">${t.name}</td>
+          <td>
+            <div class="flex items-center gap-2 min-w-[140px]">
+              <div class="flex-1 bg-carbon-900 rounded-full overflow-hidden border border-slate-900">
+                <div class="h-[6px]" style="width:${width}%;background:#2563eb;"></div>
+              </div>
+              <span class="font-mono text-[11px] text-slate-200">${t.avg.toFixed(2)}</span>
+            </div>
+          </td>
+          <td class="text-right font-mono">${t.count.toLocaleString()}</td>
+        </tr>`;
+      })
+      .join("");
+
+    $("avgByTrackTable").innerHTML =
+      tracksArr.length === 0
+        ? '<div class="text-xs text-slate-500">No data for current filters.</div>'
+        : `<table class="w-full text-[11px]">
+            <thead>
+              <tr>
+                <th>Track</th>
+                <th class="text-left">Avg finish</th>
+                <th class="text-right">Races</th>
+              </tr>
+            </thead>
+            <tbody>${trackRows}</tbody>
+          </table>`;
+
+    $("avgByCarTable").innerHTML =
+      carsArr.length === 0
+        ? '<div class="text-xs text-slate-500">No data for current filters.</div>'
+        : `<table class="w-full text-[11px]">
+            <thead>
+              <tr>
+                <th>Car</th>
+                <th class="text-left">Avg finish</th>
+                <th class="text-right">Races</th>
+              </tr>
+            </thead>
+            <tbody>${carRows}</tbody>
+          </table>`;
+  }
+
+  function computeGroupStats(races) {
+    let total = races.length;
+    let best = Infinity;
+    let worst = -Infinity;
+    let sum = 0;
+    const carCounts = {};
+    const trackCounts = {};
+
+    for (const r of races) {
+      const pos = Number(r.position);
+      sum += pos;
+      if (pos < best) best = pos;
+      if (pos > worst) worst = pos;
+      carCounts[r.vehicle_name] = (carCounts[r.vehicle_name] || 0) + 1;
+      trackCounts[r.track] = (trackCounts[r.track] || 0) + 1;
+    }
+
+    return {
+      total,
+      avg: total ? sum / total : 0,
+      best: Number.isFinite(best) ? best : null,
+      worst: Number.isFinite(worst) ? worst : null,
+      mostCar: topKey(carCounts),
+      mostTrack: topKey(trackCounts)
+    };
+  }
+
+  function renderTrackBreakdown(races) {
+    const container = $("trackBreakdown");
+    const byTrack = {};
+    for (const r of races) {
+      if (!byTrack[r.track]) byTrack[r.track] = [];
+      byTrack[r.track].push(r);
+    }
+
+    const tracks = Object.keys(byTrack).sort((a, b) => a.localeCompare(b));
+    if (!tracks.length) {
+      container.innerHTML = '<div class="text-xs text-slate-500">No tracks for current filters.</div>';
+      return;
+    }
+
+    const frag = document.createDocumentFragment();
+    for (const track of tracks) {
+      const groupRaces = byTrack[track].slice().sort((a, b) =>
+        a.race_datetime > b.race_datetime ? -1 : 1
+      );
+      const stats = computeGroupStats(groupRaces);
+      const details = document.createElement("details");
+      details.className = "breakdown";
+
+      const summary = document.createElement("summary");
+      summary.innerHTML = `
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center gap-2">
+            <span class="breakdown-title">${track}</span>
+          </div>
+          <div class="breakdown-meta">
+            <span>Races: <strong>${stats.total.toLocaleString()}</strong></span>
+            <span>Avg: <strong>${stats.avg.toFixed(2)}</strong></span>
+            <span>Best: <strong>${stats.best ?? "—"}</strong></span>
+            <span>Worst: <strong>${stats.worst ?? "—"}</strong></span>
+          </div>
+        </div>
+        <div class="breakdown-chevron">▾</div>
+      `;
+
+      const content = document.createElement("div");
+      content.className = "breakdown-content";
+      content.innerHTML = `
+        <div class="metric-row">
+          <div class="metric-pill">Most used car: <strong>${stats.mostCar || "—"}</strong></div>
+        </div>
+        <div class="table-wrapper">
+          <table class="w-full text-[11px]">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Car</th>
+                <th class="text-right">Placement</th>
+                <th class="text-right">Time</th>
+                <th>Weather</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${groupRaces
+                .map(
+                  (r) => `<tr>
+                    <td class="font-mono">${formatDate(r.race_datetime)}</td>
+                    <td>${r.vehicle_name}</td>
+                    <td class="text-right font-mono">${r.position}</td>
+                    <td class="text-right font-mono">${r.time || "—"}</td>
+                    <td>${r.weather}</td>
+                  </tr>`
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      details.appendChild(summary);
+      details.appendChild(content);
+      frag.appendChild(details);
+    }
+
+    container.innerHTML = "";
+    container.appendChild(frag);
+  }
+
+  function renderCarBreakdown(races) {
+    const container = $("carBreakdown");
+    const byCar = {};
+    for (const r of races) {
+      if (!byCar[r.vehicle_name]) byCar[r.vehicle_name] = [];
+      byCar[r.vehicle_name].push(r);
+    }
+
+    const cars = Object.keys(byCar).sort((a, b) => a.localeCompare(b));
+    if (!cars.length) {
+      container.innerHTML = '<div class="text-xs text-slate-500">No cars for current filters.</div>';
+      return;
+    }
+
+    const frag = document.createDocumentFragment();
+    for (const car of cars) {
+      const groupRaces = byCar[car].slice().sort((a, b) =>
+        a.race_datetime > b.race_datetime ? -1 : 1
+      );
+      const stats = computeGroupStats(groupRaces);
+      const details = document.createElement("details");
+      details.className = "breakdown";
+
+      const summary = document.createElement("summary");
+      summary.innerHTML = `
+        <div class="flex flex-col gap-1">
+          <span class="breakdown-title">${car}</span>
+          <div class="breakdown-meta">
+            <span>Races: <strong>${stats.total.toLocaleString()}</strong></span>
+            <span>Avg: <strong>${stats.avg.toFixed(2)}</strong></span>
+            <span>Best: <strong>${stats.best ?? "—"}</strong></span>
+            <span>Worst: <strong>${stats.worst ?? "—"}</strong></span>
+          </div>
+        </div>
+        <div class="breakdown-chevron">▾</div>
+      `;
+
+      const content = document.createElement("div");
+      content.className = "breakdown-content";
+      content.innerHTML = `
+        <div class="metric-row">
+          <div class="metric-pill">Most raced track: <strong>${stats.mostTrack || "—"}</strong></div>
+        </div>
+        <div class="table-wrapper">
+          <table class="w-full text-[11px]">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Track</th>
+                <th class="text-right">Placement</th>
+                <th class="text-right">Time</th>
+                <th>Weather</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${groupRaces
+                .map(
+                  (r) => `<tr>
+                    <td class="font-mono">${formatDate(r.race_datetime)}</td>
+                    <td>${r.track}</td>
+                    <td class="text-right font-mono">${r.position}</td>
+                    <td class="text-right font-mono">${r.time || "—"}</td>
+                    <td>${r.weather}</td>
+                  </tr>`
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      details.appendChild(summary);
+      details.appendChild(content);
+      frag.appendChild(details);
+    }
+
+    container.innerHTML = "";
+    container.appendChild(frag);
+  }
+
+  function renderComboAnalytics(races) {
+    const basics = aggregateBasics(races);
+    const combos = Object.values(basics.combosDetail);
+    const container = $("comboAnalytics");
+
+    if (!combos.length) {
+      container.innerHTML = '<div class="text-xs text-slate-500">No combos for current filters.</div>';
+      return;
+    }
+
+    const rows = combos
+      .map((c) => ({
+        track: c.track,
+        car: c.car,
+        count: c.count,
+        avg: c.sumPos / c.count,
+        best: c.best
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    container.innerHTML = "";
+    new gridjs.Grid({
+      columns: [
+        { id: "track", name: "Track" },
+        { id: "car", name: "Car" },
+        {
+          id: "count",
+          name: "Total Races",
+          formatter: (cell) => gridjs.html(`<span class="font-mono">${cell.toLocaleString()}</span>`)
+        },
+        {
+          id: "avg",
+          name: "Avg Placement",
+          formatter: (cell) => gridjs.html(`<span class="font-mono">${cell.toFixed(2)}</span>`)
+        },
+        {
+          id: "best",
+          name: "Best Finish",
+          formatter: (cell) => gridjs.html(`<span class="font-mono">${cell}</span>`)
+        }
+      ],
+      data: rows,
+      sort: true,
+      fixedHeader: true,
+      height: "260px",
+      pagination: { enabled: true, limit: 8 }
+    }).render(container);
+  }
+
+  function renderTimeAnalytics(races) {
+    const basics = aggregateBasics(races);
+    const days = basics.days;
+    const dayEntries = Object.entries(days).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+    const labels = dayEntries.map((e) => e[0]);
+    const counts = dayEntries.map((e) => e[1]);
+
+    const ctx = $("activityChart").getContext("2d");
+    if (!chartState.activityChart) {
+      chartState.activityChart = new Chart(ctx, {
+        type: "bar",
+        data: { labels, datasets: [{ label: "Races", data: counts, backgroundColor: "#1d4ed8", borderRadius: 4 }] },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: {
+                color: "#9ca3af",
+                font: { size: labels.length > 14 ? 9 : 11 },
+                maxRotation: 45,
+                minRotation: 0
+              }
+            },
+            y: {
+              grid: { color: "rgba(31,41,55,0.6)" },
+              ticks: { color: "#9ca3af", font: { size: 11 }, precision: 0 }
+            }
+          }
+        }
+      });
+    } else {
+      chartState.activityChart.data.labels = labels;
+      chartState.activityChart.data.datasets[0].data = counts;
+      chartState.activityChart.update();
+    }
+
+    const monthCounts = {};
+    for (const [d, c] of dayEntries) {
+      const mk = monthKey(d);
+      monthCounts[mk] = (monthCounts[mk] || 0) + c;
+    }
+    const mkTop = topKey(monthCounts);
+    $("mostActiveMonth").textContent = mkTop ? `${niceMonthLabel(mkTop)} (${monthCounts[mkTop]})` : "—";
+
+    const heatmap = $("activityHeatmap");
+    heatmap.innerHTML = "";
+    if (!dayEntries.length) return;
+
+    let maxCount = 0;
+    for (const [, c] of dayEntries) if (c > maxCount) maxCount = c;
+
+    const frag = document.createDocumentFragment();
+    for (const [d, c] of dayEntries) {
+      const level = c / maxCount;
+      let bucket = 1;
+      if (level > 0.75) bucket = 4;
+      else if (level > 0.5) bucket = 3;
+      else if (level > 0.25) bucket = 2;
+
+      const cell = document.createElement("div");
+      cell.className = "heat-cell";
+      cell.dataset.level = String(bucket);
+      cell.title = `${d}: ${c} race${c !== 1 ? "s" : ""}`;
+      frag.appendChild(cell);
+    }
+    heatmap.appendChild(frag);
+  }
+
+  function applySearchFilter(races) {
+    const term = raceLogState.search.trim().toLowerCase();
+    if (!term) return races;
+    return races.filter((r) => {
+      const fields = [
+        String(r.race_id),
+        r.track,
+        r.vehicle_name,
+        String(r.position),
+        r.time || "",
+        r.weather,
+        r.race_datetime
+      ];
+      return fields.some((f) => f.toLowerCase().includes(term));
+    });
+  }
+
+  function renderRaceLog(races) {
+    const wrapper = $("raceLogTableWrapper");
+    let set = applySearchFilter(races);
+    const total = set.length;
+
+    const { sortKey, sortDir } = raceLogState;
+    set = set.slice().sort((a, b) => {
+      let av = a[sortKey];
+      let bv = b[sortKey];
+      if (sortKey === "race_id" || sortKey === "position") {
+        av = Number(av);
+        bv = Number(bv);
+        if (av === bv) return 0;
+        return sortDir === "asc" ? av - bv : bv - av;
+      }
+      if (sortKey === "race_datetime") {
+        if (av === bv) return 0;
+        return sortDir === "asc" ? (av < bv ? -1 : 1) : av > bv ? -1 : 1;
+      }
+      const sa = String(av).toLowerCase();
+      const sb = String(bv).toLowerCase();
+      if (sa === sb) return 0;
+      return sortDir === "asc" ? (sa < sb ? -1 : 1) : sa > sb ? -1 : 1;
+    });
+
+    const pageSize = raceLogState.pageSize;
+    const maxPage = Math.max(1, Math.ceil(total / pageSize));
+    raceLogState.page = Math.min(raceLogState.page, maxPage);
+    const page = Math.max(1, raceLogState.page);
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    const pageItems = set.slice(start, end);
+
+    const rows = pageItems
+      .map((r) => {
+        const pos = Number(r.position);
+        let posClass =
+          "bg-slate-900 text-slate-100 border-slate-700";
+        if (pos === 1) posClass = "bg-emerald-500/15 text-emerald-200 border-emerald-500/70";
+        else if (pos === 2 || pos === 3) posClass = "bg-racing-blue/20 text-sky-200 border-racing-blue";
+
+        const w = r.weather || "";
+        let wColor = "text-slate-200";
+        if (w.includes("RAIN") || w.includes("WET")) wColor = "text-sky-300";
+        else if (w.includes("CLEAR")) wColor = "text-emerald-200";
+
+        return `<tr>
+          <td class="font-mono">${r.race_id}</td>
+          <td class="font-mono">${formatDate(r.race_datetime)}</td>
+          <td>${r.track}</td>
+          <td>${r.vehicle_name}</td>
+          <td class="text-right">
+            <span class="inline-flex items-center justify-center px-2 py-[1px] rounded-full border text-[11px] font-mono min-w-[32px] ${posClass}">
+              ${r.position}
+            </span>
+          </td>
+          <td class="text-right font-mono">${r.time || "—"}</td>
+          <td>
+            <span class="inline-flex items-center px-2 py-[1px] rounded-full border border-slate-700 bg-carbon-900 text-[11px] ${wColor}">
+              ${w}
+            </span>
+          </td>
+        </tr>`;
+      })
+      .join("");
+
+    wrapper.innerHTML =
+      total === 0
+        ? '<div class="text-xs text-slate-500">No races match current filters / search.</div>'
+        : `<table id="raceLogTable" class="w-full text-[11px]">
+            <thead>
+            <tr>
+              <th class="sortable" data-sort="race_id">Race ID</th>
+              <th class="sortable" data-sort="race_datetime">Date</th>
+              <th class="sortable" data-sort="track">Track</th>
+              <th class="sortable" data-sort="vehicle_name">Car</th>
+              <th class="sortable text-right" data-sort="position">Placement</th>
+              <th class="text-right">Time</th>
+              <th class="sortable" data-sort="weather">Weather</th>
+            </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+
+    const from = total === 0 ? 0 : start + 1;
+    const to = total === 0 ? 0 : Math.min(end, total);
+    $("logPagination").innerHTML = `
+      <span>${from.toLocaleString()}–${to.toLocaleString()} of ${total.toLocaleString()}</span>
+      <div class="flex items-center gap-2">
+        <button type="button" ${page === 1 ? "disabled" : ""} data-page="prev">Prev</button>
+        <button type="button" ${page >= maxPage ? "disabled" : ""} data-page="next">Next</button>
+        <span>Page ${page} of ${maxPage}</span>
+      </div>
+    `;
+
+    const tableEl = $("raceLogTable");
+    if (tableEl) {
+      Array.from(tableEl.querySelectorAll("th.sortable")).forEach((th) => {
+        th.addEventListener("click", () => {
+          const key = th.getAttribute("data-sort");
+          if (!key) return;
+          if (raceLogState.sortKey === key) {
+            raceLogState.sortDir = raceLogState.sortDir === "asc" ? "desc" : "asc";
+          } else {
+            raceLogState.sortKey = key;
+            raceLogState.sortDir = key === "race_datetime" ? "desc" : "asc";
+          }
+          raceLogState.page = 1;
+          renderRaceLog(races);
+        });
+      });
+    }
+
+    const pagEl = $("logPagination");
+    Array.from(pagEl.querySelectorAll("button[data-page]")).forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const dir = btn.getAttribute("data-page");
+        if (dir === "prev" && raceLogState.page > 1) raceLogState.page -= 1;
+        if (dir === "next" && raceLogState.page < maxPage) raceLogState.page += 1;
+        renderRaceLog(races);
+      });
+    });
+  }
+
+  function populateFilterOptions() {
+    const trackSet = new Set();
+    const carSet = new Set();
+    for (const r of allRaces) {
+      trackSet.add(r.track);
+      carSet.add(r.vehicle_name);
+    }
+
+    const trackSelect = $("filterTrack");
+    const carSelect = $("filterCar");
+
+    trackSelect.innerHTML =
+      '<option value="">All tracks</option>' +
+      Array.from(trackSet)
+        .sort((a, b) => a.localeCompare(b))
+        .map((t) => `<option value="${t}">${t}</option>`)
+        .join("");
+
+    carSelect.innerHTML =
+      '<option value="">All cars</option>' +
+      Array.from(carSet)
+        .sort((a, b) => a.localeCompare(b))
+        .map((c) => `<option value="${c}">${c}</option>`)
+        .join("");
+
+    $("statusTrackCount").textContent = trackSet.size.toLocaleString();
+    $("statusCarCount").textContent = carSet.size.toLocaleString();
+  }
+
+  function renderDashboard() {
+    const filtered = getFilteredRaces();
+    $("statusTotalRaces").textContent = filtered.length.toLocaleString();
+    renderSummary(filtered);
+    renderPlacementAnalytics(filtered);
+    renderAvgPlacementTables(filtered);
+    renderTrackBreakdown(filtered);
+    renderCarBreakdown(filtered);
+    renderComboAnalytics(filtered);
+    renderTimeAnalytics(filtered);
+    raceLogState.page = 1;
+    renderRaceLog(filtered);
+  }
+
+  function resetFilters() {
+    filters.track = "";
+    filters.car = "";
+    filters.from = "";
+    filters.to = "";
+    $("filterTrack").value = "";
+    $("filterCar").value = "";
+    $("filterDateFrom").value = "";
+    $("filterDateTo").value = "";
+    renderDashboard();
+  }
+
+  function handleFileContent(text) {
+    let obj;
+    try {
+      obj = JSON.parse(text);
+    } catch (e) {
+      alert("Unable to parse JSON. Please ensure this is a valid racer_profile.json file.");
+      return;
+    }
+    if (!obj || !Array.isArray(obj.races)) {
+      alert("JSON must have a top-level 'races' array.");
+      return;
+    }
+
+    rawProfile = obj;
+    allRaces = obj.races.map((r) => ({
+      race_id: r.race_id,
+      track: r.track,
+      weather: r.weather,
+      vehicle_code: r.vehicle_code,
+      vehicle_name: r.vehicle_name,
+      race_datetime: r.race_datetime,
+      position: r.position,
+      time: r.time
+    }));
+
+    $("racerIdText").textContent = obj.racer_id || "Unknown";
+    $("racerIdChip").classList.add("border-racing-blue");
+    $("statusTotalRaces").textContent = allRaces.length.toLocaleString();
+    populateFilterOptions();
+    $("uploadSection").classList.add("hidden");
+    $("dashboard").classList.remove("hidden");
+    renderDashboard();
+  }
+
+  (function init() {
+    const fileInput = $("fileInput");
+    const uploadBox = $("uploadBox");
+    const uploadButton = $("uploadButton");
+
+    uploadButton.addEventListener("click", () => fileInput.click());
+
+    fileInput.addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => handleFileContent(reader.result);
+      reader.readAsText(file);
+    });
+
+    ["dragenter", "dragover"].forEach((evt) => {
+      uploadBox.addEventListener(evt, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        uploadBox.classList.add("ring-1", "ring-racing-blue", "drag-over");
+      });
+    });
+
+    ["dragleave", "dragend", "drop"].forEach((evt) => {
+      uploadBox.addEventListener(evt, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        uploadBox.classList.remove("ring-1", "ring-racing-blue", "drag-over");
+      });
+    });
+
+    uploadBox.addEventListener("drop", (e) => {
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => handleFileContent(reader.result);
+      reader.readAsText(file);
+    });
+
+    $("filterTrack").addEventListener("change", (e) => {
+      filters.track = e.target.value || "";
+      renderDashboard();
+    });
+    $("filterCar").addEventListener("change", (e) => {
+      filters.car = e.target.value || "";
+      renderDashboard();
+    });
+    $("filterDateFrom").addEventListener("change", (e) => {
+      filters.from = e.target.value || "";
+      renderDashboard();
+    });
+    $("filterDateTo").addEventListener("change", (e) => {
+      filters.to = e.target.value || "";
+      renderDashboard();
+    });
+    $("resetFiltersBtn").addEventListener("click", resetFilters);
+
+    $("logSearchInput").addEventListener("input", (e) => {
+      raceLogState.search = e.target.value || "";
+      raceLogState.page = 1;
+      renderRaceLog(getFilteredRaces());
+    });
+  })();
+</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Racer Analytics Studio</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Tailwind (Play CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            carbon: {
+              900: "#020308",
+              800: "#050816",
+              700: "#0b1120"
+            },
+            racing: {
+              blue: "#1d4ed8",
+              blueSoft: "#0b1638",
+              cyan: "#22d3ee"
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Grid.js for rich tables -->
+  <link href="https://cdn.jsdelivr.net/npm/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/gridjs/dist/gridjs.umd.js"></script>
+
+  <style>
+    body {
+      background: radial-gradient(circle at top, #020617 0, #020308 55%, #000 100%);
+      color: #e5e7eb;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar {
+      height: 4px;
+      width: 4px;
+    }
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+      background-color: #1f2937;
+      border-radius: 999px;
+    }
+    .scrollbar-thin::-webkit-scrollbar-track {
+      background-color: transparent;
+    }
+
+    .gridjs-container {
+      color: #e5e7eb;
+    }
+    .gridjs-th, .gridjs-td {
+      background-color: transparent !important;
+      border-color: #111827 !important;
+      font-size: 0.75rem;
+      white-space: nowrap;
+    }
+    .gridjs-tr:hover .gridjs-td {
+      background-color: #020617 !important;
+    }
+    .gridjs-table {
+      border-radius: 0.5rem;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body class="min-h-screen text-slate-100">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+  <!-- Top bar -->
+  <header class="flex items-center justify-between gap-4">
+    <div class="space-y-2">
+      <div class="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-400">
+        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900/80 border border-slate-700">
+          <span class="w-1.5 h-1.5 rounded-full bg-racing-cyan"></span>
+          Racer Analytics Studio
+        </span>
+        <span class="text-slate-500">Client-side telemetry</span>
+      </div>
+      <h1 class="text-xl sm:text-2xl font-semibold tracking-wide">
+        Carbon<span class="text-racing-blue">Line</span> Performance Dashboard
+      </h1>
+      <p class="text-xs sm:text-sm text-slate-400 max-w-xl">
+        Drop in a <span class="font-mono text-slate-200">racer_profile.json</span> and explore placements, track &amp; car
+        performance, combo analytics and time-based activity in a race telemetry style UI.
+      </p>
+    </div>
+    <div class="flex items-center gap-3">
+      <div class="hidden sm:flex flex-col items-end text-xs text-slate-400">
+        <span>Rendering locally</span>
+        <span class="font-mono text-[10px] text-slate-500">No backend · JSON in · insights out</span>
+      </div>
+      <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-racing-blue via-racing-cyan to-slate-900 flex items-center justify-center text-lg font-bold text-slate-900 shadow-lg">
+        R
+      </div>
+    </div>
+  </header>
+
+  <!-- Upload strip + quick status -->
+  <section id="uploadSection" class="grid lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)] gap-4">
+    <!-- Upload panel -->
+    <div id="uploadBox"
+         class="group relative rounded-2xl border border-dashed border-slate-700 bg-slate-950/60 px-4 py-4 cursor-pointer flex flex-col sm:flex-row gap-4 sm:items-center">
+      <div class="flex items-center gap-4">
+        <div class="w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center text-racing-cyan text-lg">
+          ⬆
+        </div>
+        <div>
+          <p class="text-sm font-medium text-slate-100">
+            Drag &amp; drop your <span class="font-mono">racer_profile.json</span>
+          </p>
+          <p class="text-xs text-slate-400">
+            Or <span class="text-racing-cyan">click to browse</span>. Data stays in your browser.
+          </p>
+        </div>
+      </div>
+      <div class="flex-1 flex flex-wrap sm:justify-end gap-3 items-center">
+        <button id="uploadButton"
+                class="inline-flex items-center gap-2 rounded-full border border-racing-blue bg-racing-blue/20 px-4 py-1.5 text-xs font-medium text-racing-cyan hover:bg-racing-blue/30">
+          <span class="w-1.5 h-1.5 rounded-full bg-racing-cyan"></span>
+          Upload racer_profile.json
+        </button>
+        <span class="text-[10px] font-mono text-slate-500">
+          Required keys: racer_id, races[]
+        </span>
+      </div>
+      <input id="fileInput" type="file" accept=".json,application/json" class="hidden" />
+    </div>
+
+    <!-- Live status -->
+    <div class="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3 text-xs space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="uppercase tracking-[0.18em] text-slate-500 text-[10px]">Current Racer</span>
+        <span id="racerIdChip" class="inline-flex items-center gap-2 rounded-full border border-slate-700 px-2 py-0.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
+          <span class="font-mono text-[11px] text-slate-300" id="racerIdText">No profile loaded</span>
+        </span>
+      </div>
+      <div class="grid grid-cols-3 gap-2">
+        <div class="flex flex-col gap-1">
+          <span class="text-[10px] uppercase tracking-[0.18em] text-slate-500">Races</span>
+          <span id="statusTotalRaces" class="font-mono text-sm text-slate-100">-</span>
+        </div>
+        <div class="flex flex-col gap-1">
+          <span class="text-[10px] uppercase tracking-[0.18em] text-slate-500">Tracks</span>
+          <span id="statusTrackCount" class="font-mono text-sm text-slate-100">-</span>
+        </div>
+        <div class="flex flex-col gap-1">
+          <span class="text-[10px] uppercase tracking-[0.18em] text-slate-500">Cars</span>
+          <span id="statusCarCount" class="font-mono text-sm text-slate-100">-</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Dashboard main -->
+  <section id="dashboard" class="hidden space-y-5">
+    <!-- Global filters -->
+    <section class="rounded-2xl border border-slate-800 bg-carbon-800/70 px-4 py-3 flex flex-wrap gap-3 items-end">
+      <div class="flex flex-col gap-1 min-w-[160px]">
+        <label for="filterTrack" class="text-[10px] uppercase tracking-[0.18em] text-slate-500">Track</label>
+        <select id="filterTrack" class="w-full rounded-full border border-slate-700 bg-carbon-900 px-3 py-1.5 text-xs">
+          <option value="">All tracks</option>
+        </select>
+      </div>
+      <div class="flex flex-col gap-1 min-w-[160px]">
+        <label for="filterCar" class="text-[10px] uppercase tracking-[0.18em] text-slate-500">Car</label>
+        <select id="filterCar" class="w-full rounded-full border border-slate-700 bg-carbon-900 px-3 py-1.5 text-xs">
+          <option value="">All cars</option>
+        </select>
+      </div>
+      <div class="flex flex-col gap-1 min-w-[140px]">
+        <label for="filterDateFrom" class="text-[10px] uppercase tracking-[0.18em] text-slate-500">From</label>
+        <input id="filterDateFrom" type="date" class="w-full rounded-full border border-slate-700 bg-carbon-900 px-3 py-1.5 text-xs" />
+      </div>
+      <div class="flex flex-col gap-1 min-w-[140px]">
+        <label for="filterDateTo" class="text-[10px] uppercase tracking-[0.18em] text-slate-500">To</label>
+        <input id="filterDateTo" type="date" class="w-full rounded-full border border-slate-700 bg-carbon-900 px-3 py-1.5 text-xs" />
+      </div>
+      <div class="ml-auto flex items-center gap-2">
+        <button id="resetFiltersBtn"
+                class="rounded-full border border-slate-700 bg-carbon-900 px-3 py-1.5 text-[11px] text-slate-300">
+          Reset filters
+        </button>
+      </div>
+    </section>
+
+    <!-- Summary row -->
+    <section class="grid lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1.1fr)] gap-4">
+      <!-- Summary stats -->
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3">
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Session Summary</h2>
+            <p class="text-[11px] text-slate-500">Key metrics for current filters</p>
+          </div>
+        </div>
+        <div id="summaryCards" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs"></div>
+      </div>
+
+      <!-- Placement mini-grid -->
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Placement Snapshot</h2>
+        </div>
+        <div class="h-24">
+          <canvas id="miniPlacementChart"></canvas>
+        </div>
+        <div class="grid grid-cols-3 gap-2 text-[11px] mt-1">
+          <div class="flex flex-col">
+            <span class="text-slate-500 uppercase tracking-[0.16em] text-[10px]">Best</span>
+            <span id="miniBest" class="font-mono text-sm">-</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-slate-500 uppercase tracking-[0.16em] text-[10px]">Average</span>
+            <span id="miniAvg" class="font-mono text-sm">-</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-slate-500 uppercase tracking-[0.16em] text-[10px]">Worst</span>
+            <span id="miniWorst" class="font-mono text-sm">-</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Placement + time series -->
+    <section class="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1.5fr)] gap-4">
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400">Placement Curve</h3>
+            <p class="text-[11px] text-slate-500">Distribution + cumulative % per finishing position</p>
+          </div>
+        </div>
+        <div class="h-56">
+          <canvas id="placementChart"></canvas>
+        </div>
+        <div class="mt-2 overflow-x-auto scrollbar-thin" id="placementTableWrapper"></div>
+      </div>
+
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400">Race Activity</h3>
+            <p class="text-[11px] text-slate-500">Races per day, most active month &amp; heatmap</p>
+          </div>
+        </div>
+        <div class="h-40">
+          <canvas id="activityChart"></canvas>
+        </div>
+        <div class="mt-3 text-[11px] text-slate-400">
+          <span>Most active month: </span>
+          <span id="mostActiveMonth" class="font-mono text-slate-200"></span>
+        </div>
+        <div class="mt-2">
+          <div class="text-[11px] text-slate-500 mb-1">Heatmap</div>
+          <div class="heatmap-grid flex flex-wrap gap-[3px]" id="activityHeatmap"></div>
+          <div class="heatmap-legend flex items-center gap-2 mt-1 text-[11px] text-slate-500">
+            <span>Low</span>
+            <span class="heat-cell" data-level="1"></span>
+            <span class="heat-cell" data-level="2"></span>
+            <span class="heat-cell" data-level="3"></span>
+            <span class="heat-cell" data-level="4"></span>
+            <span>High</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Track & car performance wall -->
+    <section class="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1.5fr)] gap-4">
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between mb-1">
+          <div>
+            <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400">Tracks · Avg Placement</h3>
+            <p class="text-[11px] text-slate-500">Lower is better · sorted best to worst</p>
+          </div>
+        </div>
+        <div id="avgByTrackTable" class="scrollbar-thin max-h-64 overflow-y-auto"></div>
+      </div>
+
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between mb-1">
+          <div>
+            <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400">Cars · Avg Placement</h3>
+            <p class="text-[11px] text-slate-500">Lower is better · sorted best to worst</p>
+          </div>
+        </div>
+        <div id="avgByCarTable" class="scrollbar-thin max-h-64 overflow-y-auto"></div>
+      </div>
+    </section>
+
+    <!-- Track + car breakdowns in columns -->
+    <section class="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1.5fr)] gap-4">
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between mb-1">
+          <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400">Track Breakdown</h3>
+          <span class="text-[11px] text-slate-500">Click a track to drill in</span>
+        </div>
+        <div id="trackBreakdown" class="scrollbar-thin max-h-80 overflow-y-auto space-y-2"></div>
+      </div>
+
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between mb-1">
+          <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400">Car Breakdown</h3>
+          <span class="text-[11px] text-slate-500">Click a car to drill in</span>
+        </div>
+        <div id="carBreakdown" class="scrollbar-thin max-h-80 overflow-y-auto space-y-2"></div>
+      </div>
+    </section>
+
+    <!-- Combo analytics + full log -->
+    <section class="grid lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1.7fr)] gap-4">
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3 flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400">Track + Car Combos</h3>
+            <p class="text-[11px] text-slate-500">Sorted by usage · sortable</p>
+          </div>
+        </div>
+        <div id="comboAnalytics" class="scrollbar-thin max-h-80 overflow-auto text-[11px]"></div>
+      </div>
+
+      <div class="rounded-2xl border border-slate-800 bg-carbon-800/80 px-4 py-3 flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400">Full Race Log</h3>
+            <p class="text-[11px] text-slate-500">Searchable, sortable, paginated</p>
+          </div>
+          <div class="flex items-center gap-2 text-[11px] text-slate-500">
+            <span class="hidden sm:inline">Search</span>
+            <input id="logSearchInput"
+                   type="search"
+                   placeholder="Track, car, weather, ID..."
+                   class="rounded-full border border-slate-700 bg-carbon-900 px-3 py-1 text-[11px] min-w-[160px]" />
+          </div>
+        </div>
+        <div id="raceLogTableWrapper" class="scrollbar-thin max-h-96 overflow-auto text-[11px]"></div>
+        <div id="logPagination" class="flex items-center justify-between text-[11px] text-slate-500"></div>
+      </div>
+    </section>
+  </section>
+</div>
+
+<script>
+  // Global state (already declared earlier)
+  allRaces = [];
+  rawProfile = null;
+
+  const filters = { track: "", car: "", from: "", to: "" };
+
+  const chartState = {
+    placementChart: null,
+    activityChart: null,
+    miniPlacementChart: null
+  };
+
+  const raceLogState = {
+    sortKey: "race_datetime",
+    sortDir: "desc",
+    page: 1,
+    pageSize: 25,
+    search: ""
+  };
+
+  const $ = (id) => document.getElementById(id);
+
+  function formatDate(dateStr) {
+    if (!dateStr) return "";
+    const [d] = dateStr.split(" ");
+    return d;
+  }
+
+  function monthKey(dateStr) {
+    const d = new Date(dateStr.replace(" ", "T"));
+    if (Number.isNaN(d.getTime())) return "";
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`;
+  }
+
+  function niceMonthLabel(key) {
+    if (!key) return "—";
+    const [y, m] = key.split("-");
+    const dt = new Date(Number(y), Number(m) - 1, 1);
+    return dt.toLocaleString(undefined, { month: "short", year: "numeric" });
+  }
+
+  function getFilteredRaces() {
+    return allRaces.filter((r) => {
+      if (filters.track && r.track !== filters.track) return false;
+      if (filters.car && r.vehicle_name !== filters.car) return false;
+
+      const dateOnly = r.race_datetime.split(" ")[0];
+      if (filters.from && dateOnly < filters.from) return false;
+      if (filters.to && dateOnly > filters.to) return false;
+      return true;
+    });
+  }
+
+  function aggregateBasics(races) {
+    const total = races.length;
+    if (!total) {
+      return {
+        total,
+        avgPlacement: 0,
+        best: null,
+        worst: null,
+        placements: {},
+        tracks: {},
+        cars: {},
+        combos: {},
+        weather: {},
+        days: {},
+        combosDetail: {}
+      };
+    }
+
+    let sumPos = 0;
+    let best = Infinity;
+    let worst = -Infinity;
+    const placements = {};
+    const tracks = {};
+    const cars = {};
+    const combos = {};
+    const combosDetail = {};
+    const weather = {};
+    const days = {};
+
+    for (const r of races) {
+      const pos = Number(r.position);
+      sumPos += pos;
+      if (pos < best) best = pos;
+      if (pos > worst) worst = pos;
+
+      placements[pos] = (placements[pos] || 0) + 1;
+      tracks[r.track] = (tracks[r.track] || 0) + 1;
+      cars[r.vehicle_name] = (cars[r.vehicle_name] || 0) + 1;
+      weather[r.weather] = (weather[r.weather] || 0) + 1;
+
+      const comboKey = `${r.track}__${r.vehicle_name}`;
+      combos[comboKey] = (combos[comboKey] || 0) + 1;
+      if (!combosDetail[comboKey]) {
+        combosDetail[comboKey] = {
+          track: r.track,
+          car: r.vehicle_name,
+          count: 0,
+          sumPos: 0,
+          best: Infinity
+        };
+      }
+      const cd = combosDetail[comboKey];
+      cd.count += 1;
+      cd.sumPos += pos;
+      if (pos < cd.best) cd.best = pos;
+
+      const day = r.race_datetime.split(" ")[0];
+      days[day] = (days[day] || 0) + 1;
+    }
+
+    return {
+      total,
+      avgPlacement: sumPos / total,
+      best,
+      worst,
+      placements,
+      tracks,
+      cars,
+      combos,
+      weather,
+      days,
+      combosDetail
+    };
+  }
+
+  function topKey(map) {
+    const entries = Object.entries(map || {});
+    if (!entries.length) return null;
+    entries.sort((a, b) => b[1] - a[1]);
+    return entries[0][0];
+  }
+
+  // Summary cards + mini placement
+  function renderSummary(races) {
+    const basics = aggregateBasics(races);
+    const summaryEl = $("summaryCards");
+    if (!basics.total) {
+      summaryEl.innerHTML = '<div class="text-xs text-slate-500">No races match current filters.</div>';
+      $("miniBest").textContent = "-";
+      $("miniAvg").textContent = "-";
+      $("miniWorst").textContent = "-";
+      return;
+    }
+
+    const mostTrack = topKey(basics.tracks) || "—";
+    const mostCar = topKey(basics.cars) || "—";
+    const mostWeather = topKey(basics.weather) || "—";
+
+    let topComboLabel = "—";
+    if (Object.keys(basics.combos).length) {
+      const [comboKey] = Object.entries(basics.combos).sort((a, b) => b[1] - a[1])[0];
+      const [track, car] = comboKey.split("__");
+      topComboLabel = `${track} + ${car}`;
+    }
+
+    const mostDay = topKey(basics.days) || "—";
+
+    summaryEl.innerHTML = `
+      <article class="flex flex-col gap-1">
+        <h4 class="summary-label">Total Races</h4>
+        <div class="summary-value-row">
+          <span class="summary-value font-mono">${basics.total.toLocaleString()}</span>
+          <span class="summary-subtext">Across current filters</span>
+        </div>
+      </article>
+      <article class="flex flex-col gap-1">
+        <h4 class="summary-label">Average Placement</h4>
+        <div class="summary-value-row">
+          <span class="summary-value">${basics.avgPlacement.toFixed(2)}</span>
+          <span class="summary-subtext">Best ${basics.best ?? "—"} · Worst ${basics.worst ?? "—"}</span>
+        </div>
+      </article>
+      <article class="flex flex-col gap-1">
+        <h4 class="summary-label">Most Raced Track</h4>
+        <div class="summary-value-row">
+          <span class="summary-value truncate" title="${mostTrack}">${mostTrack}</span>
+          <span class="summary-subtext">Usage leader</span>
+        </div>
+      </article>
+      <article class="flex flex-col gap-1">
+        <h4 class="summary-label">Most Raced Car</h4>
+        <div class="summary-value-row">
+          <span class="summary-value truncate" title="${mostCar}">${mostCar}</span>
+          <span class="summary-subtext">Primary choice</span>
+        </div>
+      </article>
+      <article class="flex flex-col gap-1">
+        <h4 class="summary-label">Top Track + Car</h4>
+        <div class="summary-value-row">
+          <span class="summary-value truncate" title="${topComboLabel}">${topComboLabel}</span>
+          <span class="summary-subtext">Most used combo</span>
+        </div>
+      </article>
+      <article class="flex flex-col gap-1">
+        <h4 class="summary-label">Most Common Weather</h4>
+        <div class="summary-value-row">
+          <span class="summary-value">${mostWeather}</span>
+          <span class="summary-subtext">Typical condition</span>
+        </div>
+      </article>
+      <article class="flex flex-col gap-1">
+        <h4 class="summary-label">Day with Most Races</h4>
+        <div class="summary-value-row">
+          <span class="summary-value font-mono">${mostDay}</span>
+          <span class="summary-subtext">Peak racing day</span>
+        </div>
+      </article>
+    `;
+
+    $("miniBest").textContent = basics.best ?? "-";
+    $("miniAvg").textContent = basics.avgPlacement.toFixed(2);
+    $("miniWorst").textContent = basics.worst ?? "-";
+
+    // Mini placement chart (positions 1..N)
+    const entries = Object.entries(basics.placements)
+      .map(([pos, count]) => ({ pos: Number(pos), count }))
+      .sort((a, b) => a.pos - b.pos);
+    const labels = entries.map((e) => e.pos);
+    const counts = entries.map((e) => e.count);
+
+    const ctxMini = $("miniPlacementChart").getContext("2d");
+    if (!chartState.miniPlacementChart) {
+      chartState.miniPlacementChart = new Chart(ctxMini, {
+        type: "bar",
+        data: { labels, datasets: [{ data: counts, backgroundColor: "#1d4ed8", borderRadius: 4 }] },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: "#9ca3af", font: { size: 9 } } },
+            y: { grid: { display: false }, ticks: { display: false } }
+          }
+        }
+      });
+    } else {
+      chartState.miniPlacementChart.data.labels = labels;
+      chartState.miniPlacementChart.data.datasets[0].data = counts;
+      chartState.miniPlacementChart.update();
+    }
+  }
+
+  // Placement analytics (combo chart + table)
+  function renderPlacementAnalytics(races) {
+    const wrapper = $("placementTableWrapper");
+    const basics = aggregateBasics(races);
+
+    if (!basics.total) {
+      wrapper.innerHTML = '<div class="text-xs text-slate-500">No races to display.</div>';
+      if (chartState.placementChart) {
+        chartState.placementChart.data.labels = [];
+        chartState.placementChart.data.datasets[0].data = [];
+        chartState.placementChart.update();
+      }
+      return;
+    }
+
+    const entries = Object.entries(basics.placements)
+      .map(([pos, count]) => ({ pos: Number(pos), count }))
+      .sort((a, b) => a.pos - b.pos);
+    const labels = entries.map((e) => e.pos);
+    const counts = entries.map((e) => e.count);
+
+    let running = 0;
+    const cumulative = counts.map((c) => {
+      running += c;
+      return (running / basics.total) * 100;
+    });
+
+    const ctx = $("placementChart").getContext("2d");
+    if (!chartState.placementChart) {
+      chartState.placementChart = new Chart(ctx, {
+        data: {
+          labels,
+          datasets: [
+            {
+              type: "bar",
+              label: "Finishes",
+              data: counts,
+              backgroundColor: "#1d4ed8",
+              borderRadius: 5,
+              maxBarThickness: 26,
+              yAxisID: "y"
+            },
+            {
+              type: "line",
+              label: "Cumulative %",
+              data: cumulative,
+              borderColor: "#38bdf8",
+              backgroundColor: "rgba(56,189,248,0.15)",
+              tension: 0.3,
+              borderWidth: 2,
+              pointRadius: 2,
+              yAxisID: "y1"
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, labels: { color: "#9ca3af", boxWidth: 12 } },
+            tooltip: {
+              mode: "index",
+              intersect: false,
+              callbacks: {
+                label(ctx) {
+                  if (ctx.datasetIndex === 0) {
+                    const count = ctx.parsed.y || 0;
+                    const pct = ((count / basics.total) * 100).toFixed(1);
+                    return `Finishes: ${count} (${pct}%)`;
+                  }
+                  return `Cumulative: ${ctx.parsed.y.toFixed(1)}%`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: "#9ca3af", font: { size: 11 } }
+            },
+            y: {
+              position: "left",
+              grid: { color: "rgba(31,41,55,0.6)" },
+              ticks: { color: "#9ca3af", font: { size: 11 }, precision: 0 }
+            },
+            y1: {
+              position: "right",
+              grid: { display: false },
+              ticks: {
+                color: "#9ca3af",
+                font: { size: 11 },
+                callback: (v) => `${v}%`
+              },
+              min: 0,
+              max: 100
+            }
+          }
+        }
+      });
+    } else {
+      chartState.placementChart.data.labels = labels;
+      chartState.placementChart.data.datasets[0].data = counts;
+      chartState.placementChart.data.datasets[1].data = cumulative;
+      chartState.placementChart.update();
+    }
+
+    const rows = entries
+      .map((e, idx) => {
+        const pct = ((e.count / basics.total) * 100).toFixed(1);
+        const cum = cumulative[idx].toFixed(1);
+        return `<tr>
+          <td class="text-center">${e.pos}</td>
+          <td class="text-right font-mono">${e.count.toLocaleString()}</td>
+          <td class="text-right font-mono">${pct}%</td>
+          <td class="text-right font-mono">${cum}%</td>
+        </tr>`;
+      })
+      .join("");
+
+    wrapper.innerHTML = `
+      <table class="w-full text-[11px]">
+        <thead>
+          <tr>
+            <th class="text-center">Pos</th>
+            <th class="text-right">Count</th>
+            <th class="text-right">Percent</th>
+            <th class="text-right">Cumulative</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  // Average placement tables: track + car
+  function renderAvgPlacementTables(races) {
+    const byTrack = {};
+    const byCar = {};
+
+    for (const r of races) {
+      const pos = Number(r.position);
+      if (!byTrack[r.track]) byTrack[r.track] = { name: r.track, count: 0, sum: 0 };
+      if (!byCar[r.vehicle_name]) byCar[r.vehicle_name] = { name: r.vehicle_name, count: 0, sum: 0 };
+      byTrack[r.track].count += 1;
+      byTrack[r.track].sum += pos;
+      byCar[r.vehicle_name].count += 1;
+      byCar[r.vehicle_name].sum += pos;
+    }
+
+    const tracksArr = Object.values(byTrack).map((t) => ({ ...t, avg: t.sum / t.count }));
+    const carsArr = Object.values(byCar).map((t) => ({ ...t, avg: t.sum / t.count }));
+    tracksArr.sort((a, b) => a.avg - b.avg);
+    carsArr.sort((a, b) => a.avg - b.avg);
+
+    const allAvgs = [...tracksArr.map((t) => t.avg), ...carsArr.map((c) => c.avg)];
+    const maxAvg = allAvgs.length ? Math.max(...allAvgs) : 1;
+
+    const trackRows = tracksArr
+      .map((t) => {
+        const score = 1 - t.avg / maxAvg;
+        const width = Math.round(15 + score * 85);
+        return `<tr>
+          <td class="pr-2">${t.name}</td>
+          <td>
+            <div class="flex items-center gap-2 min-w-[140px]">
+              <div class="flex-1 bg-carbon-900 rounded-full overflow-hidden border border-slate-900">
+                <div class="h-[6px]" style="width:${width}%;background:#2563eb;"></div>
+              </div>
+              <span class="font-mono text-[11px] text-slate-200">${t.avg.toFixed(2)}</span>
+            </div>
+          </td>
+          <td class="text-right font-mono">${t.count.toLocaleString()}</td>
+        </tr>`;
+      })
+      .join("");
+
+    const carRows = carsArr
+      .map((t) => {
+        const score = 1 - t.avg / maxAvg;
+        const width = Math.round(15 + score * 85);
+        return `<tr>
+          <td class="pr-2">${t.name}</td>
+          <td>
+            <div class="flex items-center gap-2 min-w-[140px]">
+              <div class="flex-1 bg-carbon-900 rounded-full overflow-hidden border border-slate-900">
+                <div class="h-[6px]" style="width:${width}%;background:#2563eb;"></div>
+              </div>
+              <span class="font-mono text-[11px] text-slate-200">${t.avg.toFixed(2)}</span>
+            </div>
+          </td>
+          <td class="text-right font-mono">${t.count.toLocaleString()}</td>
+        </tr>`;
+      })
+      .join("");
+
+    $("avgByTrackTable").innerHTML =
+      tracksArr.length === 0
+        ? '<div class="text-xs text-slate-500">No data for current filters.</div>'
+        : `<table class="w-full text-[11px]">
+            <thead>
+              <tr>
+                <th>Track</th>
+                <th class="text-left">Avg finish</th>
+                <th class="text-right">Races</th>
+              </tr>
+            </thead>
+            <tbody>${trackRows}</tbody>
+          </table>`;
+
+    $("avgByCarTable").innerHTML =
+      carsArr.length === 0
+        ? '<div class="text-xs text-slate-500">No data for current filters.</div>'
+        : `<table class="w-full text-[11px]">
+            <thead>
+              <tr>
+                <th>Car</th>
+                <th class="text-left">Avg finish</th>
+                <th class="text-right">Races</th>
+              </tr>
+            </thead>
+            <tbody>${carRows}</tbody>
+          </table>`;
+  }
+
+  // Breakdown accordions
+  function computeGroupStats(races) {
+    let total = races.length;
+    let best = Infinity;
+    let worst = -Infinity;
+    let sum = 0;
+    const carCounts = {};
+    const trackCounts = {};
+
+    for (const r of races) {
+      const pos = Number(r.position);
+      sum += pos;
+      if (pos < best) best = pos;
+      if (pos > worst) worst = pos;
+      carCounts[r.vehicle_name] = (carCounts[r.vehicle_name] || 0) + 1;
+      trackCounts[r.track] = (trackCounts[r.track] || 0) + 1;
+    }
+
+    return {
+      total,
+      avg: total ? sum / total : 0,
+      best: Number.isFinite(best) ? best : null,
+      worst: Number.isFinite(worst) ? worst : null,
+      mostCar: topKey(carCounts),
+      mostTrack: topKey(trackCounts)
+    };
+  }
+
+  function renderTrackBreakdown(races) {
+    const container = $("trackBreakdown");
+    const byTrack = {};
+    for (const r of races) {
+      if (!byTrack[r.track]) byTrack[r.track] = [];
+      byTrack[r.track].push(r);
+    }
+
+    const tracks = Object.keys(byTrack).sort((a, b) => a.localeCompare(b));
+    if (!tracks.length) {
+      container.innerHTML = '<div class="text-xs text-slate-500">No tracks for current filters.</div>';
+      return;
+    }
+
+    const frag = document.createDocumentFragment();
+    for (const track of tracks) {
+      const groupRaces = byTrack[track].slice().sort((a, b) =>
+        a.race_datetime > b.race_datetime ? -1 : 1
+      );
+      const stats = computeGroupStats(groupRaces);
+      const details = document.createElement("details");
+      details.className = "breakdown";
+
+      const summary = document.createElement("summary");
+      summary.innerHTML = `
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center gap-2">
+            <span class="breakdown-title">${track}</span>
+          </div>
+          <div class="breakdown-meta">
+            <span>Races: <strong>${stats.total.toLocaleString()}</strong></span>
+            <span>Avg: <strong>${stats.avg.toFixed(2)}</strong></span>
+            <span>Best: <strong>${stats.best ?? "—"}</strong></span>
+            <span>Worst: <strong>${stats.worst ?? "—"}</strong></span>
+          </div>
+        </div>
+        <div class="breakdown-chevron">▾</div>
+      `;
+
+      const content = document.createElement("div");
+      content.className = "breakdown-content";
+      content.innerHTML = `
+        <div class="metric-row">
+          <div class="metric-pill">Most used car: <strong>${stats.mostCar || "—"}</strong></div>
+        </div>
+        <div class="table-wrapper">
+          <table class="w-full text-[11px]">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Car</th>
+                <th class="text-right">Placement</th>
+                <th class="text-right">Time</th>
+                <th>Weather</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${groupRaces
+                .map(
+                  (r) => `<tr>
+                    <td class="font-mono">${formatDate(r.race_datetime)}</td>
+                    <td>${r.vehicle_name}</td>
+                    <td class="text-right font-mono">${r.position}</td>
+                    <td class="text-right font-mono">${r.time || "—"}</td>
+                    <td>${r.weather}</td>
+                  </tr>`
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      details.appendChild(summary);
+      details.appendChild(content);
+      frag.appendChild(details);
+    }
+
+    container.innerHTML = "";
+    container.appendChild(frag);
+  }
+
+  function renderCarBreakdown(races) {
+    const container = $("carBreakdown");
+    const byCar = {};
+    for (const r of races) {
+      if (!byCar[r.vehicle_name]) byCar[r.vehicle_name] = [];
+      byCar[r.vehicle_name].push(r);
+    }
+
+    const cars = Object.keys(byCar).sort((a, b) => a.localeCompare(b));
+    if (!cars.length) {
+      container.innerHTML = '<div class="text-xs text-slate-500">No cars for current filters.</div>';
+      return;
+    }
+
+    const frag = document.createDocumentFragment();
+    for (const car of cars) {
+      const groupRaces = byCar[car].slice().sort((a, b) =>
+        a.race_datetime > b.race_datetime ? -1 : 1
+      );
+      const stats = computeGroupStats(groupRaces);
+      const details = document.createElement("details");
+      details.className = "breakdown";
+
+      const summary = document.createElement("summary");
+      summary.innerHTML = `
+        <div class="flex flex-col gap-1">
+          <span class="breakdown-title">${car}</span>
+          <div class="breakdown-meta">
+            <span>Races: <strong>${stats.total.toLocaleString()}</strong></span>
+            <span>Avg: <strong>${stats.avg.toFixed(2)}</strong></span>
+            <span>Best: <strong>${stats.best ?? "—"}</strong></span>
+            <span>Worst: <strong>${stats.worst ?? "—"}</strong></span>
+          </div>
+        </div>
+        <div class="breakdown-chevron">▾</div>
+      `;
+
+      const content = document.createElement("div");
+      content.className = "breakdown-content";
+      content.innerHTML = `
+        <div class="metric-row">
+          <div class="metric-pill">Most raced track: <strong>${stats.mostTrack || "—"}</strong></div>
+        </div>
+        <div class="table-wrapper">
+          <table class="w-full text-[11px]">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Track</th>
+                <th class="text-right">Placement</th>
+                <th class="text-right">Time</th>
+                <th>Weather</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${groupRaces
+                .map(
+                  (r) => `<tr>
+                    <td class="font-mono">${formatDate(r.race_datetime)}</td>
+                    <td>${r.track}</td>
+                    <td class="text-right font-mono">${r.position}</td>
+                    <td class="text-right font-mono">${r.time || "—"}</td>
+                    <td>${r.weather}</td>
+                  </tr>`
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      details.appendChild(summary);
+      details.appendChild(content);
+      frag.appendChild(details);
+    }
+
+    container.innerHTML = "";
+    container.appendChild(frag);
+  }
+
+  // Combo analytics with Grid.js
+  function renderComboAnalytics(races) {
+    const basics = aggregateBasics(races);
+    const combos = Object.values(basics.combosDetail);
+    const container = $("comboAnalytics");
+
+    if (!combos.length) {
+      container.innerHTML = '<div class="text-xs text-slate-500">No combos for current filters.</div>';
+      return;
+    }
+
+    const rows = combos
+      .map((c) => ({
+        track: c.track,
+        car: c.car,
+        count: c.count,
+        avg: c.sumPos / c.count,
+        best: c.best
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    container.innerHTML = "";
+    new gridjs.Grid({
+      columns: [
+        { id: "track", name: "Track" },
+        { id: "car", name: "Car" },
+        {
+          id: "count",
+          name: "Total Races",
+          formatter: (cell) => gridjs.html(`<span class="font-mono">${cell.toLocaleString()}</span>`)
+        },
+        {
+          id: "avg",
+          name: "Avg Placement",
+          formatter: (cell) => gridjs.html(`<span class="font-mono">${cell.toFixed(2)}</span>`)
+        },
+        {
+          id: "best",
+          name: "Best Finish",
+          formatter: (cell) => gridjs.html(`<span class="font-mono">${cell}</span>`)
+        }
+      ],
+      data: rows,
+      sort: true,
+      fixedHeader: true,
+      height: "260px",
+      pagination: { enabled: true, limit: 8 }
+    }).render(container);
+  }
+
+  // Time analytics
+  function renderTimeAnalytics(races) {
+    const basics = aggregateBasics(races);
+    const days = basics.days;
+    const dayEntries = Object.entries(days).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+    const labels = dayEntries.map((e) => e[0]);
+    const counts = dayEntries.map((e) => e[1]);
+
+    const ctx = $("activityChart").getContext("2d");
+    if (!chartState.activityChart) {
+      chartState.activityChart = new Chart(ctx, {
+        type: "bar",
+        data: { labels, datasets: [{ label: "Races", data: counts, backgroundColor: "#1d4ed8", borderRadius: 4 }] },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: {
+                color: "#9ca3af",
+                font: { size: labels.length > 14 ? 9 : 11 },
+                maxRotation: 45,
+                minRotation: 0
+              }
+            },
+            y: {
+              grid: { color: "rgba(31,41,55,0.6)" },
+              ticks: { color: "#9ca3af", font: { size: 11 }, precision: 0 }
+            }
+          }
+        }
+      });
+    } else {
+      chartState.activityChart.data.labels = labels;
+      chartState.activityChart.data.datasets[0].data = counts;
+      chartState.activityChart.update();
+    }
+
+    // Most active month
+    const monthCounts = {};
+    for (const [d, c] of dayEntries) {
+      const mk = monthKey(d);
+      monthCounts[mk] = (monthCounts[mk] || 0) + c;
+    }
+    const mkTop = topKey(monthCounts);
+    $("mostActiveMonth").textContent = mkTop ? `${niceMonthLabel(mkTop)} (${monthCounts[mkTop]})` : "—";
+
+    // Heatmap
+    const heatmap = $("activityHeatmap");
+    heatmap.innerHTML = "";
+    if (!dayEntries.length) return;
+
+    let maxCount = 0;
+    for (const [, c] of dayEntries) if (c > maxCount) maxCount = c;
+
+    const frag = document.createDocumentFragment();
+    for (const [d, c] of dayEntries) {
+      const level = c / maxCount;
+      let bucket = 1;
+      if (level > 0.75) bucket = 4;
+      else if (level > 0.5) bucket = 3;
+      else if (level > 0.25) bucket = 2;
+
+      const cell = document.createElement("div");
+      cell.className = "heat-cell";
+      cell.dataset.level = String(bucket);
+      cell.title = `${d}: ${c} race${c !== 1 ? "s" : ""}`;
+      frag.appendChild(cell);
+    }
+    heatmap.appendChild(frag);
+  }
+
+  // Race log with custom visual pills (Grid.js is used for other tables)
+  function applySearchFilter(races) {
+    const term = raceLogState.search.trim().toLowerCase();
+    if (!term) return races;
+    return races.filter((r) => {
+      const fields = [
+        String(r.race_id),
+        r.track,
+        r.vehicle_name,
+        String(r.position),
+        r.time || "",
+        r.weather,
+        r.race_datetime
+      ];
+      return fields.some((f) => f.toLowerCase().includes(term));
+    });
+  }
+
+  function renderRaceLog(races) {
+    const wrapper = $("raceLogTableWrapper");
+    let set = applySearchFilter(races);
+    const total = set.length;
+
+    const { sortKey, sortDir } = raceLogState;
+    set = set.slice().sort((a, b) => {
+      let av = a[sortKey];
+      let bv = b[sortKey];
+      if (sortKey === "race_id" || sortKey === "position") {
+        av = Number(av);
+        bv = Number(bv);
+        if (av === bv) return 0;
+        return sortDir === "asc" ? av - bv : bv - av;
+      }
+      if (sortKey === "race_datetime") {
+        if (av === bv) return 0;
+        return sortDir === "asc" ? (av < bv ? -1 : 1) : av > bv ? -1 : 1;
+      }
+      const sa = String(av).toLowerCase();
+      const sb = String(bv).toLowerCase();
+      if (sa === sb) return 0;
+      return sortDir === "asc" ? (sa < sb ? -1 : 1) : sa > sb ? -1 : 1;
+    });
+
+    const pageSize = raceLogState.pageSize;
+    const maxPage = Math.max(1, Math.ceil(total / pageSize));
+    raceLogState.page = Math.min(raceLogState.page, maxPage);
+    const page = Math.max(1, raceLogState.page);
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    const pageItems = set.slice(start, end);
+
+    const rows = pageItems
+      .map((r) => {
+        const pos = Number(r.position);
+        let posClass =
+          "bg-slate-900 text-slate-100 border-slate-700";
+        if (pos === 1) posClass = "bg-emerald-500/15 text-emerald-200 border-emerald-500/70";
+        else if (pos === 2 || pos === 3) posClass = "bg-racing-blue/20 text-sky-200 border-racing-blue";
+
+        const w = r.weather || "";
+        let wColor = "text-slate-200";
+        if (w.includes("RAIN") || w.includes("WET")) wColor = "text-sky-300";
+        else if (w.includes("CLEAR")) wColor = "text-emerald-200";
+
+        return `<tr>
+          <td class="font-mono">${r.race_id}</td>
+          <td class="font-mono">${formatDate(r.race_datetime)}</td>
+          <td>${r.track}</td>
+          <td>${r.vehicle_name}</td>
+          <td class="text-right">
+            <span class="inline-flex items-center justify-center px-2 py-[1px] rounded-full border text-[11px] font-mono min-w-[32px] ${posClass}">
+              ${r.position}
+            </span>
+          </td>
+          <td class="text-right font-mono">${r.time || "—"}</td>
+          <td>
+            <span class="inline-flex items-center px-2 py-[1px] rounded-full border border-slate-700 bg-carbon-900 text-[11px] ${wColor}">
+              ${w}
+            </span>
+          </td>
+        </tr>`;
+      })
+      .join("");
+
+    wrapper.innerHTML =
+      total === 0
+        ? '<div class="text-xs text-slate-500">No races match current filters / search.</div>'
+        : `<table id="raceLogTable" class="w-full text-[11px]">
+            <thead>
+            <tr>
+              <th class="sortable" data-sort="race_id">Race ID</th>
+              <th class="sortable" data-sort="race_datetime">Date</th>
+              <th class="sortable" data-sort="track">Track</th>
+              <th class="sortable" data-sort="vehicle_name">Car</th>
+              <th class="sortable text-right" data-sort="position">Placement</th>
+              <th class="text-right">Time</th>
+              <th class="sortable" data-sort="weather">Weather</th>
+            </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+
+    const from = total === 0 ? 0 : start + 1;
+    const to = total === 0 ? 0 : Math.min(end, total);
+    $("logPagination").innerHTML = `
+      <span>${from.toLocaleString()}–${to.toLocaleString()} of ${total.toLocaleString()}</span>
+      <div class="flex items-center gap-2">
+        <button type="button" ${page === 1 ? "disabled" : ""} data-page="prev">Prev</button>
+        <button type="button" ${page >= maxPage ? "disabled" : ""} data-page="next">Next</button>
+        <span>Page ${page} of ${maxPage}</span>
+      </div>
+    `;
+
+    const tableEl = $("raceLogTable");
+    if (tableEl) {
+      Array.from(tableEl.querySelectorAll("th.sortable")).forEach((th) => {
+        th.addEventListener("click", () => {
+          const key = th.getAttribute("data-sort");
+          if (!key) return;
+          if (raceLogState.sortKey === key) {
+            raceLogState.sortDir = raceLogState.sortDir === "asc" ? "desc" : "asc";
+          } else {
+            raceLogState.sortKey = key;
+            raceLogState.sortDir = key === "race_datetime" ? "desc" : "asc";
+          }
+          raceLogState.page = 1;
+          renderRaceLog(races);
+        });
+      });
+    }
+
+    const pagEl = $("logPagination");
+    Array.from(pagEl.querySelectorAll("button[data-page]")).forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const dir = btn.getAttribute("data-page");
+        if (dir === "prev" && raceLogState.page > 1) raceLogState.page -= 1;
+        if (dir === "next" && raceLogState.page < maxPage) raceLogState.page += 1;
+        renderRaceLog(races);
+      });
+    });
+  }
+
+  // Filters + dashboard orchestrator
+  function populateFilterOptions() {
+    const trackSet = new Set();
+    const carSet = new Set();
+    for (const r of allRaces) {
+      trackSet.add(r.track);
+      carSet.add(r.vehicle_name);
+    }
+
+    const trackSelect = $("filterTrack");
+    const carSelect = $("filterCar");
+
+    trackSelect.innerHTML =
+      '<option value="">All tracks</option>' +
+      Array.from(trackSet)
+        .sort((a, b) => a.localeCompare(b))
+        .map((t) => `<option value="${t}">${t}</option>`)
+        .join("");
+
+    carSelect.innerHTML =
+      '<option value="">All cars</option>' +
+      Array.from(carSet)
+        .sort((a, b) => a.localeCompare(b))
+        .map((c) => `<option value="${c}">${c}</option>`)
+        .join("");
+
+    $("statusTrackCount").textContent = trackSet.size.toLocaleString();
+    $("statusCarCount").textContent = carSet.size.toLocaleString();
+  }
+
+  function renderDashboard() {
+    const filtered = getFilteredRaces();
+    $("statusTotalRaces").textContent = filtered.length.toLocaleString();
+    renderSummary(filtered);
+    renderPlacementAnalytics(filtered);
+    renderAvgPlacementTables(filtered);
+    renderTrackBreakdown(filtered);
+    renderCarBreakdown(filtered);
+    renderComboAnalytics(filtered);
+    renderTimeAnalytics(filtered);
+    raceLogState.page = 1;
+    renderRaceLog(filtered);
+  }
+
+  function resetFilters() {
+    filters.track = "";
+    filters.car = "";
+    filters.from = "";
+    filters.to = "";
+    $("filterTrack").value = "";
+    $("filterCar").value = "";
+    $("filterDateFrom").value = "";
+    $("filterDateTo").value = "";
+    renderDashboard();
+  }
+
+  function handleFileContent(text) {
+    let obj;
+    try {
+      obj = JSON.parse(text);
+    } catch (e) {
+      alert("Unable to parse JSON. Please ensure this is a valid racer_profile.json file.");
+      return;
+    }
+    if (!obj || !Array.isArray(obj.races)) {
+      alert("JSON must have a top-level 'races' array.");
+      return;
+    }
+
+    rawProfile = obj;
+    allRaces = obj.races.map((r) => ({
+      race_id: r.race_id,
+      track: r.track,
+      weather: r.weather,
+      vehicle_code: r.vehicle_code,
+      vehicle_name: r.vehicle_name,
+      race_datetime: r.race_datetime,
+      position: r.position,
+      time: r.time
+    }));
+
+    $("racerIdText").textContent = obj.racer_id || "Unknown";
+    $("racerIdChip").classList.add("border-racing-blue");
+    $("statusTotalRaces").textContent = allRaces.length.toLocaleString();
+    populateFilterOptions();
+    $("uploadSection").classList.add("hidden");
+    $("dashboard").classList.remove("hidden");
+    renderDashboard();
+  }
+
+  // Init wiring
+  (function init() {
+    const fileInput = $("fileInput");
+    const uploadBox = $("uploadBox");
+    const uploadButton = $("uploadButton");
+
+    uploadButton.addEventListener("click", () => fileInput.click());
+
+    fileInput.addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => handleFileContent(reader.result);
+      reader.readAsText(file);
+    });
+
+    ["dragenter", "dragover"].forEach((evt) => {
+      uploadBox.addEventListener(evt, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        uploadBox.classList.add("ring-1", "ring-racing-blue", "drag-over");
+      });
+    });
+
+    ["dragleave", "dragend", "drop"].forEach((evt) => {
+      uploadBox.addEventListener(evt, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        uploadBox.classList.remove("ring-1", "ring-racing-blue", "drag-over");
+      });
+    });
+
+    uploadBox.addEventListener("drop", (e) => {
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => handleFileContent(reader.result);
+      reader.readAsText(file);
+    });
+
+    $("filterTrack").addEventListener("change", (e) => {
+      filters.track = e.target.value || "";
+      renderDashboard();
+    });
+    $("filterCar").addEventListener("change", (e) => {
+      filters.car = e.target.value || "";
+      renderDashboard();
+    });
+    $("filterDateFrom").addEventListener("change", (e) => {
+      filters.from = e.target.value || "";
+      renderDashboard();
+    });
+    $("filterDateTo").addEventListener("change", (e) => {
+      filters.to = e.target.value || "";
+      renderDashboard();
+    });
+    $("resetFiltersBtn").addEventListener("click", resetFilters);
+
+    $("logSearchInput").addEventListener("input", (e) => {
+      raceLogState.search = e.target.value || "";
+      raceLogState.page = 1;
+      renderRaceLog(getFilteredRaces());
+    });
+  })();
+</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Racer Analytics Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- Chart.js for graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            /* Carbon black + racing blue palette */
+            --bg: #020308;
+            --panel: #050816;
+            --panel-elevated: #050816;
+            --accent: #1d4ed8;
+            --accent-soft: #0b1638;
+            --accent-text: #e0f2fe;
+            --border-subtle: #111827;
+            --text-main: #f9fafb;
+            --text-soft: #9ca3af;
+            --text-faint: #6b7280;
+            --danger: #f97373;
+            --radius-lg: 14px;
+            --radius-md: 10px;
+            --radius-pill: 999px;
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                "Segoe UI", sans-serif;
+            -webkit-font-smoothing: antialiased;
+            background-color: var(--bg);
+            color: var(--text-main);
+        }
+
+        .shell {
+            max-width: 1320px;
+            margin: 0 auto;
+            padding: 24px 20px 32px;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 12px 16px 14px;
+            border-radius: var(--radius-lg);
+            background: linear-gradient(135deg, #020617, #020308);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .title-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .title-chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            border-radius: var(--radius-pill);
+            font-size: 11px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            border: 1px solid #334155;
+            color: var(--text-soft);
+        }
+
+        h1 {
+            font-size: 24px;
+            letter-spacing: 0.02em;
+            margin: 0;
+        }
+
+        .subtitle {
+            margin: 0;
+            font-size: 13px;
+            color: var(--text-soft);
+            max-width: 620px;
+        }
+
+        .brand-mark {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 12px;
+            background: radial-gradient(circle at 30% 0, #38bdf8, #1d4ed8 55%, #020617 90%);
+            color: #0b1220;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        /* Upload zone */
+        .upload-shell {
+            margin-top: 18px;
+        }
+
+        .upload-box {
+            position: relative;
+            padding: 22px 18px;
+            border-radius: var(--radius-lg);
+            background-color: #050816;
+            border: 1px dashed #1e293b;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            gap: 12px;
+            color: var(--text-soft);
+            cursor: pointer;
+        }
+
+        .upload-box.drag-over {
+            border-color: var(--accent);
+            background-color: #020617;
+        }
+
+        .upload-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 999px;
+            background-color: #020617;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent-text);
+            margin-bottom: 2px;
+        }
+
+        .upload-title {
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .upload-hint {
+            font-size: 13px;
+            color: var(--text-soft);
+        }
+
+        .upload-hint strong {
+            color: var(--accent-text);
+            font-weight: 600;
+        }
+
+        .upload-cta-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: 4px;
+        }
+
+        .btn {
+            border-radius: var(--radius-pill);
+            border: 1px solid var(--accent);
+            background-color: var(--accent-soft);
+            color: var(--accent-text);
+            font-size: 13px;
+            padding: 7px 16px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .btn:hover {
+            background-color: #1e40af;
+        }
+
+        .btn-secondary {
+            background-color: #020617;
+            color: var(--text-soft);
+            border-style: dashed;
+            border-color: #475569;
+        }
+
+        .btn-secondary:hover {
+            background-color: #020617;
+        }
+
+        .upload-note {
+            font-size: 11px;
+            color: var(--text-faint);
+        }
+
+        .upload-hidden-input {
+            display: none;
+        }
+
+        /* Dashboard layout */
+        #dashboard {
+            margin-top: 22px;
+            display: none;
+        }
+
+        .dashboard-header-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 16px;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 18px;
+        }
+
+        .racer-id-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            padding: 5px 11px;
+            border-radius: var(--radius-pill);
+            background-color: #020617;
+            border: 1px solid #334155;
+            color: var(--accent-text);
+        }
+
+        .racer-id-pill::before {
+            content: "";
+            width: 7px;
+            height: 7px;
+            border-radius: 999px;
+            background: #22c55e;
+        }
+
+        .racer-id-pill span.code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+                "Courier New", monospace;
+            font-size: 11px;
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 9px;
+            border-radius: var(--radius-pill);
+            border: 1px solid #1f2937;
+            background-color: #020617;
+            font-size: 11px;
+            color: var(--text-soft);
+        }
+
+        /* Filter bar */
+        .filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            padding: 10px 14px;
+            border-radius: var(--radius-lg);
+            background-color: #020617;
+            border: 1px solid var(--border-subtle);
+            margin-bottom: 22px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            min-width: 140px;
+            flex: 1 1 140px;
+        }
+
+        .filter-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-faint);
+        }
+
+        select,
+        input[type="date"],
+        input[type="search"] {
+            border-radius: var(--radius-pill);
+            border: 1px solid #1f2937;
+            background-color: #020617;
+            color: var(--text-main);
+            font-size: 12px;
+            padding: 6px 11px;
+            outline: none;
+            min-height: 30px;
+        }
+
+        select:focus,
+        input[type="date"]:focus,
+        input[type="search"]:focus {
+            border-color: var(--accent);
+        }
+
+        .filter-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+        }
+
+        .btn-reset {
+            border-radius: var(--radius-pill);
+            border: 1px solid #1f2937;
+            background-color: #020617;
+            color: var(--text-soft);
+            font-size: 12px;
+            padding: 5px 11px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .btn-reset:hover {
+            border-color: #4b5563;
+            color: var(--text-main);
+        }
+
+        /* Summary cards */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 12px;
+            margin-bottom: 22px;
+        }
+
+        .summary-card {
+            border-radius: var(--radius-md);
+            background-color: #020617;
+            border: 1px solid #1f2937;
+            padding: 9px 12px 10px;
+        }
+
+        .summary-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-faint);
+            margin-bottom: 5px;
+        }
+
+        .summary-value-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 6px;
+        }
+
+        .summary-value {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .summary-subtext {
+            font-size: 11px;
+            color: var(--text-soft);
+            max-width: 60%;
+            text-align: right;
+        }
+
+        /* Section layout */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .section {
+            border-radius: var(--radius-lg);
+            background-color: #020617;
+            border: 1px solid #1f2937;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 9px 12px;
+            border-bottom: 1px solid #111827;
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .section-subtitle {
+            font-size: 11px;
+            color: var(--text-faint);
+        }
+
+        .section-body {
+            padding: 10px 12px 11px;
+        }
+
+        /* Tables */
+        .table-wrapper {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        thead tr {
+            background-color: #020617;
+        }
+
+        th,
+        td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #111827;
+            white-space: nowrap;
+        }
+
+        th {
+            text-align: left;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-faint);
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: #020617;
+        }
+
+        tbody tr:nth-child(odd) {
+            background-color: #020617;
+        }
+
+        tbody tr:hover {
+            background-color: #020617;
+        }
+
+        .sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .sortable span.indicator {
+            margin-left: 4px;
+            opacity: 0.5;
+        }
+
+        /* Collapsible breakdowns */
+        .accordion-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        details.breakdown {
+            border-radius: 10px;
+            background-color: #020617;
+            border: 1px solid #1f2937;
+        }
+
+        details.breakdown[open] {
+            border-color: var(--accent);
+        }
+
+        details.breakdown > summary {
+            list-style: none;
+            padding: 8px 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        details.breakdown > summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .breakdown-title {
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .breakdown-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--text-soft);
+        }
+
+        .breakdown-meta span {
+            border-radius: var(--radius-pill);
+            padding: 2px 7px;
+            background-color: #020617;
+            border: 1px solid #111827;
+        }
+
+        .breakdown-chevron {
+            font-size: 11px;
+            color: var(--text-soft);
+        }
+
+        .breakdown-content {
+            padding: 0 10px 9px;
+        }
+
+        .metric-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            margin: 7px 0 7px;
+        }
+
+        .metric-pill {
+            padding: 3px 7px;
+            border-radius: var(--radius-pill);
+            background-color: #020617;
+            border: 1px solid #111827;
+            font-size: 11px;
+            color: var(--text-soft);
+        }
+
+        .metric-pill strong {
+            color: var(--accent-text);
+        }
+
+        /* Charts and heatmap */
+        .chart-container {
+            width: 100%;
+            height: 210px;
+        }
+
+        .heatmap-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+        }
+
+        .heat-cell {
+            width: 11px;
+            height: 11px;
+            border-radius: 3px;
+            background-color: #020617;
+            border: 1px solid #020617;
+        }
+
+        .heat-cell[data-level="1"] {
+            background-color: #0f172a;
+        }
+
+        .heat-cell[data-level="2"] {
+            background-color: #1d4ed8;
+        }
+
+        .heat-cell[data-level="3"] {
+            background-color: #2563eb;
+        }
+
+        .heat-cell[data-level="4"] {
+            background-color: #38bdf8;
+        }
+
+        .heatmap-legend {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--text-soft);
+            margin-top: 5px;
+        }
+
+        .heatmap-legend .heat-cell {
+            width: 13px;
+            height: 13px;
+        }
+
+        /* Race log */
+        .log-header {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .log-search {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 220px;
+        }
+
+        .pagination {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--text-soft);
+        }
+
+        .pagination button {
+            border-radius: var(--radius-pill);
+            border: 1px solid #1f2937;
+            background-color: #020617;
+            color: var(--text-soft);
+            padding: 3px 7px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .pagination button:disabled {
+            opacity: 0.35;
+            cursor: default;
+        }
+
+        .pill-muted {
+            border-radius: var(--radius-pill);
+            border: 1px solid #1f2937;
+            padding: 2px 7px;
+            font-size: 11px;
+            color: var(--text-soft);
+            background-color: #020617;
+        }
+
+        .muted {
+            color: var(--text-soft);
+        }
+
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+                "Courier New", monospace;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .nowrap {
+            white-space: nowrap;
+        }
+
+        @media (max-width: 900px) {
+            .shell {
+                padding: 20px 14px 28px;
+            }
+
+            header {
+                flex-direction: row;
+                align-items: flex-start;
+            }
+
+            .grid-2 {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+
+        @media (max-width: 640px) {
+            header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .filter-actions {
+                width: 100%;
+                justify-content: flex-end;
+            }
+
+            .summary-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 480px) {
+            .summary-grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="shell">
+    <header>
+        <div class="title-group">
+            <div class="title-chip-row">
+                <div class="badge">Racer Analytics</div>
+                <span class="chip">
+                    Client-side JSON dashboard
+                </span>
+            </div>
+            <h1>Racer Performance Insights</h1>
+            <p class="subtitle">
+                Upload a <span class="mono">racer_profile.json</span> file to explore placements, tracks,
+                vehicles, and time-based racing activity.
+            </p>
+        </div>
+        <div class="brand-mark">
+            R
+        </div>
+    </header>
+
+    <!-- Upload -->
+    <section class="upload-shell" id="uploadSection">
+        <div class="upload-box" id="uploadBox">
+            <div class="upload-icon">⬆</div>
+            <div class="upload-title">Upload your <span class="mono">racer_profile.json</span></div>
+            <div class="upload-hint">
+                Drag and drop your <strong>racer_profile.json</strong> here or click to upload.
+            </div>
+            <div class="upload-cta-row">
+                <button class="btn" type="button" id="uploadButton">
+                    <span>Upload racer_profile.json</span>
+                </button>
+                <span class="pill-muted">No data is sent to a server</span>
+            </div>
+            <div class="upload-note">
+                JSON must match the scraper format with a top-level <span class="mono">racer_id</span> and
+                <span class="mono">races</span> array.
+            </div>
+            <input class="upload-hidden-input" type="file" id="fileInput" accept=".json,application/json" />
+        </div>
+    </section>
+
+    <!-- Dashboard -->
+    <section id="dashboard">
+        <div class="dashboard-header-row">
+            <div class="racer-id-pill" id="racerIdDisplay">
+                <span>Racer ID</span>
+                <span class="code mono" id="racerIdText">—</span>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <span class="chip">
+                    <span style="width:7px;height:7px;border-radius:999px;background:#4ade80;"></span>
+                    Live filters applied
+                </span>
+                <span class="chip">
+                    100% client-side
+                </span>
+            </div>
+        </div>
+
+        <!-- Global filters -->
+        <div class="filter-bar">
+            <div class="filter-group">
+                <span class="filter-label">Track</span>
+                <select id="filterTrack">
+                    <option value="">All Tracks</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <span class="filter-label">Car</span>
+                <select id="filterCar">
+                    <option value="">All Cars</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <span class="filter-label">From</span>
+                <input type="date" id="filterDateFrom" />
+            </div>
+            <div class="filter-group">
+                <span class="filter-label">To</span>
+                <input type="date" id="filterDateTo" />
+            </div>
+            <div class="filter-actions">
+                <button class="btn-reset" type="button" id="resetFiltersBtn">
+                    ✕ Reset filters
+                </button>
+            </div>
+        </div>
+
+        <!-- Summary cards -->
+        <div class="summary-grid" id="summaryCards"></div>
+
+        <!-- Placement analytics + time analytics -->
+        <div class="grid-2">
+            <section class="section">
+                <div class="section-header">
+                    <div>
+                        <div class="section-title">Placement Distribution</div>
+                        <div class="section-subtitle">Count & percentage of finishes by position</div>
+                    </div>
+                </div>
+                <div class="section-body">
+                    <div class="chart-container">
+                        <canvas id="placementChart"></canvas>
+                    </div>
+                    <div class="table-wrapper" style="margin-top:10px;" id="placementTableWrapper">
+                        <!-- placement table -->
+                    </div>
+                </div>
+            </section>
+
+            <section class="section">
+                <div class="section-header">
+                    <div>
+                        <div class="section-title">Race Activity by Day</div>
+                        <div class="section-subtitle">Volume of races over time</div>
+                    </div>
+                </div>
+                <div class="section-body">
+                    <div class="chart-container">
+                        <canvas id="activityChart"></canvas>
+                    </div>
+                    <div style="margin-top:10px;">
+                        <div class="section-subtitle">
+                            Most active month:
+                            <span id="mostActiveMonth" class="mono"></span>
+                        </div>
+                        <div style="margin-top:8px;">
+                            <div class="section-subtitle" style="margin-bottom:4px;">Activity heatmap</div>
+                            <div class="heatmap-grid" id="activityHeatmap"></div>
+                            <div class="heatmap-legend">
+                                <span>Less</span>
+                                <span class="heat-cell" data-level="1"></span>
+                                <span class="heat-cell" data-level="2"></span>
+                                <span class="heat-cell" data-level="3"></span>
+                                <span class="heat-cell" data-level="4"></span>
+                                <span>More</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Average placement by track / car -->
+        <div class="grid-2">
+            <section class="section">
+                <div class="section-header">
+                    <div>
+                        <div class="section-title">Average Placement by Track</div>
+                        <div class="section-subtitle">Sorted best to worst</div>
+                    </div>
+                </div>
+                <div class="section-body table-wrapper" id="avgByTrackTable"></div>
+            </section>
+
+            <section class="section">
+                <div class="section-header">
+                    <div>
+                        <div class="section-title">Average Placement by Car</div>
+                        <div class="section-subtitle">Sorted best to worst</div>
+                    </div>
+                </div>
+                <div class="section-body table-wrapper" id="avgByCarTable"></div>
+            </section>
+        </div>
+
+        <!-- Track & Car breakdowns -->
+        <div class="grid-2">
+            <section class="section">
+                <div class="section-header">
+                    <div>
+                        <div class="section-title">Track Breakdown</div>
+                        <div class="section-subtitle">Per-track performance and race log</div>
+                    </div>
+                </div>
+                <div class="section-body">
+                    <div class="accordion-list" id="trackBreakdown"></div>
+                </div>
+            </section>
+
+            <section class="section">
+                <div class="section-header">
+                    <div>
+                        <div class="section-title">Car Breakdown</div>
+                        <div class="section-subtitle">Per-car performance and race log</div>
+                    </div>
+                </div>
+                <div class="section-body">
+                    <div class="accordion-list" id="carBreakdown"></div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Combo analytics -->
+        <section class="section" style="margin-top:18px;">
+            <div class="section-header">
+                <div>
+                    <div class="section-title">Track + Car Combo Analytics</div>
+                    <div class="section-subtitle">Sortable combos by usage and placement</div>
+                </div>
+            </div>
+            <div class="section-body table-wrapper" id="comboAnalytics"></div>
+        </section>
+
+        <!-- Full race log -->
+        <section class="section" style="margin-top:18px;">
+            <div class="section-header">
+                <div>
+                    <div class="section-title">Full Race Log</div>
+                    <div class="section-subtitle">
+                        Searchable, sortable, paginated view of all races
+                    </div>
+                </div>
+            </div>
+            <div class="section-body">
+                <div class="log-header">
+                    <div class="log-search">
+                        <span class="filter-label">Search</span>
+                        <input
+                            type="search"
+                            id="logSearchInput"
+                            placeholder="Search by track, car, weather, or ID"
+                        />
+                    </div>
+                    <div class="pagination" id="logPagination"></div>
+                </div>
+                <div class="table-wrapper" id="raceLogTableWrapper"></div>
+            </div>
+        </section>
+    </section>
+</div>
+
+<script>
+    // --- State (reuse global) ---
+    allRaces = [];
+    rawProfile = null;
+
+    // reuse global filters object
+    Object.assign(filters, { track: "", car: "", from: "", to: "" });
+
+    const chartState = {
+        placementChart: null,
+        activityChart: null
+    };
+
+    const raceLogState = {
+        sortKey: "race_datetime",
+        sortDir: "desc",
+        page: 1,
+        pageSize: 25,
+        search: ""
+    };
+
+    // --- DOM helpers ---
+    const $ = (id) => document.getElementById(id);
+
+    function formatDate(dateStr) {
+        if (!dateStr) return "";
+        const [d] = dateStr.split(" ");
+        return d;
+    }
+
+    function monthKey(dateStr) {
+        const d = new Date(dateStr.replace(" ", "T"));
+        if (Number.isNaN(d.getTime())) return "";
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        return `${y}-${m}`;
+    }
+
+    function niceMonthLabel(key) {
+        if (!key) return "—";
+        const [y, m] = key.split("-");
+        const dt = new Date(Number(y), Number(m) - 1, 1);
+        return dt.toLocaleString(undefined, { month: "short", year: "numeric" });
+    }
+
+    function getFilteredRaces() {
+        return allRaces.filter((r) => {
+            if (filters.track && r.track !== filters.track) return false;
+            if (filters.car && r.vehicle_name !== filters.car) return false;
+
+            const dateOnly = r.race_datetime.split(" ")[0];
+
+            if (filters.from && dateOnly < filters.from) return false;
+            if (filters.to && dateOnly > filters.to) return false;
+
+            return true;
+        });
+    }
+
+    function aggregateBasics(races) {
+        const total = races.length;
+        if (!total) {
+            return {
+                total,
+                avgPlacement: 0,
+                best: null,
+                worst: null,
+                placements: {},
+                tracks: {},
+                cars: {},
+                combos: {},
+                weather: {},
+                days: {},
+                combosDetail: {}
+            };
+        }
+
+        let sumPos = 0;
+        let best = Infinity;
+        let worst = -Infinity;
+
+        const placements = {};
+        const tracks = {};
+        const cars = {};
+        const combos = {};
+        const combosDetail = {};
+        const weather = {};
+        const days = {};
+
+        for (const r of races) {
+            const pos = Number(r.position);
+            sumPos += pos;
+            if (pos < best) best = pos;
+            if (pos > worst) worst = pos;
+
+            placements[pos] = (placements[pos] || 0) + 1;
+            tracks[r.track] = (tracks[r.track] || 0) + 1;
+            cars[r.vehicle_name] = (cars[r.vehicle_name] || 0) + 1;
+            weather[r.weather] = (weather[r.weather] || 0) + 1;
+
+            const comboKey = `${r.track}__${r.vehicle_name}`;
+            combos[comboKey] = (combos[comboKey] || 0) + 1;
+            if (!combosDetail[comboKey]) {
+                combosDetail[comboKey] = {
+                    track: r.track,
+                    car: r.vehicle_name,
+                    count: 0,
+                    sumPos: 0,
+                    best: Infinity
+                };
+            }
+            const cd = combosDetail[comboKey];
+            cd.count += 1;
+            cd.sumPos += pos;
+            if (pos < cd.best) cd.best = pos;
+
+            const day = r.race_datetime.split(" ")[0];
+            days[day] = (days[day] || 0) + 1;
+        }
+
+        return {
+            total,
+            avgPlacement: sumPos / total,
+            best,
+            worst,
+            placements,
+            tracks,
+            cars,
+            combos,
+            weather,
+            days,
+            combosDetail
+        };
+    }
+
+    function topKey(map) {
+        const entries = Object.entries(map || {});
+        if (!entries.length) return null;
+        entries.sort((a, b) => b[1] - a[1]);
+        return entries[0][0];
+    }
+
+    // --- Rendering: summary ---
+    function renderSummary(races) {
+        const summaryEl = $("summaryCards");
+        const basics = aggregateBasics(races);
+
+        if (!basics.total) {
+            summaryEl.innerHTML =
+                '<div class="section-subtitle">No races match the current filters.</div>';
+            return;
+        }
+
+        const mostTrack = topKey(basics.tracks) || "—";
+        const mostCar = topKey(basics.cars) || "—";
+        const mostWeather = topKey(basics.weather) || "—";
+
+        let topCombo = "—";
+        if (Object.keys(basics.combos).length) {
+            const [comboKey] = Object.entries(basics.combos).sort((a, b) => b[1] - a[1])[0];
+            const [track, car] = comboKey.split("__");
+            topCombo = `${track} + ${car}`;
+        }
+
+        const mostDay = topKey(basics.days) || "—";
+
+        summaryEl.innerHTML = `
+            <div class="summary-card">
+                <div class="summary-label">Total Races</div>
+                <div class="summary-value-row">
+                    <div class="summary-value mono">${basics.total.toLocaleString()}</div>
+                    <div class="summary-subtext">Across all filters</div>
+                </div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Average Placement</div>
+                <div class="summary-value-row">
+                    <div class="summary-value">${basics.avgPlacement.toFixed(2)}</div>
+                    <div class="summary-subtext">Best: ${basics.best ?? "—"} · Worst: ${
+            basics.worst ?? "—"
+        }</div>
+                </div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Most Raced Track</div>
+                <div class="summary-value-row">
+                    <div class="summary-value">${mostTrack}</div>
+                    <div class="summary-subtext">Most common location</div>
+                </div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Most Raced Car</div>
+                <div class="summary-value-row">
+                    <div class="summary-value">${mostCar}</div>
+                    <div class="summary-subtext">Primary vehicle choice</div>
+                </div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Top Track + Car</div>
+                <div class="summary-value-row">
+                    <div class="summary-value">${topCombo}</div>
+                    <div class="summary-subtext">Most used combination</div>
+                </div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Most Common Weather</div>
+                <div class="summary-value-row">
+                    <div class="summary-value">${mostWeather}</div>
+                    <div class="summary-subtext">Typical race conditions</div>
+                </div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Day with Most Races</div>
+                <div class="summary-value-row">
+                    <div class="summary-value mono">${mostDay}</div>
+                    <div class="summary-subtext">Peak daily activity</div>
+                </div>
+            </div>
+        `;
+    }
+
+    // --- Placement analytics ---
+    function renderPlacementAnalytics(races) {
+        const wrapper = $("placementTableWrapper");
+        const basics = aggregateBasics(races);
+
+        if (!basics.total) {
+            wrapper.innerHTML = '<div class="section-subtitle">No races to display.</div>';
+            if (chartState.placementChart) {
+                chartState.placementChart.data.labels = [];
+                chartState.placementChart.data.datasets[0].data = [];
+                chartState.placementChart.update();
+            }
+            return;
+        }
+
+        const entries = Object.entries(basics.placements)
+            .map(([pos, count]) => ({ pos: Number(pos), count }))
+            .sort((a, b) => a.pos - b.pos);
+
+        const labels = entries.map((e) => e.pos);
+        const counts = entries.map((e) => e.count);
+
+        // cumulative percentage series for a richer chart
+        let running = 0;
+        const cumulative = counts.map((c) => {
+            running += c;
+            return (running / basics.total) * 100;
+        });
+
+        const ctx = $("placementChart").getContext("2d");
+        if (!chartState.placementChart) {
+            chartState.placementChart = new Chart(ctx, {
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            type: "bar",
+                            label: "Finishes",
+                            data: counts,
+                            backgroundColor: "#1d4ed8",
+                            borderRadius: 5,
+                            maxBarThickness: 26,
+                            yAxisID: "y"
+                        },
+                        {
+                            type: "line",
+                            label: "Cumulative %",
+                            data: cumulative,
+                            borderColor: "#38bdf8",
+                            backgroundColor: "rgba(56, 189, 248, 0.12)",
+                            tension: 0.3,
+                            borderWidth: 2,
+                            pointRadius: 2,
+                            yAxisID: "y1"
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true, labels: { color: "#9ca3af", boxWidth: 14 } },
+                        tooltip: {
+                            mode: "index",
+                            intersect: false,
+                            callbacks: {
+                                label(ctx) {
+                                    if (ctx.datasetIndex === 0) {
+                                        const count = ctx.parsed.y || 0;
+                                        const pct = ((count / basics.total) * 100).toFixed(1);
+                                        return `Finishes: ${count} (${pct}%)`;
+                                    }
+                                    return `Cumulative: ${ctx.parsed.y.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: "#9ca3af", font: { size: 11 } }
+                        },
+                        y: {
+                            position: "left",
+                            grid: { color: "rgba(31,41,55,0.6)" },
+                            ticks: {
+                                color: "#9ca3af",
+                                font: { size: 11 },
+                                precision: 0
+                            }
+                        },
+                        y1: {
+                            position: "right",
+                            grid: { display: false },
+                            ticks: {
+                                color: "#9ca3af",
+                                font: { size: 11 },
+                                callback: (v) => `${v}%`
+                            },
+                            min: 0,
+                            max: 100
+                        }
+                    }
+                }
+            });
+        } else {
+            chartState.placementChart.data.labels = labels;
+            chartState.placementChart.data.datasets[0].data = counts;
+            chartState.placementChart.data.datasets[1].data = cumulative;
+            chartState.placementChart.update();
+        }
+
+        const rows = entries
+            .map((e, idx) => {
+                const pct = ((e.count / basics.total) * 100).toFixed(1);
+                const cum = cumulative[idx].toFixed(1);
+                return `<tr>
+                    <td class="text-center">${e.pos}</td>
+                    <td class="text-right mono">${e.count.toLocaleString()}</td>
+                    <td class="text-right mono">${pct}%</td>
+                    <td class="text-right mono">${cum}%</td>
+                </tr>`;
+            })
+            .join("");
+
+        wrapper.innerHTML = `
+            <table>
+                <thead>
+                    <tr>
+                        <th class="text-center">Position</th>
+                        <th class="text-right">Count</th>
+                        <th class="text-right">Percent</th>
+                        <th class="text-right">Cumulative</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        `;
+    }
+
+    // --- Average placement tables ---
+    function renderAvgPlacementTables(races) {
+        const byTrack = {};
+        const byCar = {};
+
+        for (const r of races) {
+            const pos = Number(r.position);
+            if (!byTrack[r.track]) {
+                byTrack[r.track] = { name: r.track, count: 0, sum: 0 };
+            }
+            if (!byCar[r.vehicle_name]) {
+                byCar[r.vehicle_name] = { name: r.vehicle_name, count: 0, sum: 0 };
+            }
+            byTrack[r.track].count += 1;
+            byTrack[r.track].sum += pos;
+            byCar[r.vehicle_name].count += 1;
+            byCar[r.vehicle_name].sum += pos;
+        }
+
+        const tracksArr = Object.values(byTrack).map((t) => ({
+            ...t,
+            avg: t.sum / t.count
+        }));
+        const carsArr = Object.values(byCar).map((t) => ({
+            ...t,
+            avg: t.sum / t.count
+        }));
+
+        tracksArr.sort((a, b) => a.avg - b.avg);
+        carsArr.sort((a, b) => a.avg - b.avg);
+
+        // lower average == better performance, so invert for bar width
+        const allAvgs = [...tracksArr.map((t) => t.avg), ...carsArr.map((c) => c.avg)];
+        const maxAvg = allAvgs.length ? Math.max(...allAvgs) : 1;
+
+        const trackRows = tracksArr
+            .map((t) => {
+                const score = 1 - t.avg / maxAvg;
+                const width = Math.round(15 + score * 85); // 15–100%
+                return `<tr>
+                <td>${t.name}</td>
+                <td>
+                    <div style="display:flex;align-items:center;gap:6px;min-width:140px;">
+                        <div style="flex:1;background:#020617;border-radius:999px;overflow:hidden;border:1px solid #111827;">
+                            <div style="height:6px;width:${width}%;background:#2563eb;"></div>
+                        </div>
+                        <span class="mono" style="font-size:11px;">${t.avg.toFixed(2)}</span>
+                    </div>
+                </td>
+                <td class="text-right mono">${t.count.toLocaleString()}</td>
+            </tr>`;
+            })
+            .join("");
+
+        const carRows = carsArr
+            .map((t) => {
+                const score = 1 - t.avg / maxAvg;
+                const width = Math.round(15 + score * 85);
+                return `<tr>
+                <td>${t.name}</td>
+                <td>
+                    <div style="display:flex;align-items:center;gap:6px;min-width:140px;">
+                        <div style="flex:1;background:#020617;border-radius:999px;overflow:hidden;border:1px solid #111827;">
+                            <div style="height:6px;width:${width}%;background:#2563eb;"></div>
+                        </div>
+                        <span class="mono" style="font-size:11px;">${t.avg.toFixed(2)}</span>
+                    </div>
+                </td>
+                <td class="text-right mono">${t.count.toLocaleString()}</td>
+            </tr>`;
+            })
+            .join("");
+
+        $("avgByTrackTable").innerHTML =
+            tracksArr.length === 0
+                ? '<div class="section-subtitle">No data for current filters.</div>'
+                : `<table>
+                    <thead>
+                        <tr>
+                            <th>Track</th>
+                            <th class="text-right">Avg Finish</th>
+                            <th class="text-right">Races</th>
+                        </tr>
+                    </thead>
+                    <tbody>${trackRows}</tbody>
+                </table>`;
+
+        $("avgByCarTable").innerHTML =
+            carsArr.length === 0
+                ? '<div class="section-subtitle">No data for current filters.</div>'
+                : `<table>
+                    <thead>
+                        <tr>
+                            <th>Car</th>
+                            <th class="text-right">Avg Finish</th>
+                            <th class="text-right">Races</th>
+                        </tr>
+                    </thead>
+                    <tbody>${carRows}</tbody>
+                </table>`;
+    }
+
+    // --- Breakdown accordions ---
+    function computeGroupStats(races) {
+        let total = races.length;
+        let best = Infinity;
+        let worst = -Infinity;
+        let sum = 0;
+        const carCounts = {};
+        const trackCounts = {};
+
+        for (const r of races) {
+            const pos = Number(r.position);
+            sum += pos;
+            if (pos < best) best = pos;
+            if (pos > worst) worst = pos;
+            carCounts[r.vehicle_name] = (carCounts[r.vehicle_name] || 0) + 1;
+            trackCounts[r.track] = (trackCounts[r.track] || 0) + 1;
+        }
+
+        return {
+            total,
+            avg: total ? sum / total : 0,
+            best: Number.isFinite(best) ? best : null,
+            worst: Number.isFinite(worst) ? worst : null,
+            mostCar: topKey(carCounts),
+            mostTrack: topKey(trackCounts)
+        };
+    }
+
+    function renderTrackBreakdown(races) {
+        const container = $("trackBreakdown");
+        const byTrack = {};
+        for (const r of races) {
+            if (!byTrack[r.track]) byTrack[r.track] = [];
+            byTrack[r.track].push(r);
+        }
+
+        const tracks = Object.keys(byTrack).sort((a, b) => a.localeCompare(b));
+        if (!tracks.length) {
+            container.innerHTML = '<div class="section-subtitle">No tracks for current filters.</div>';
+            return;
+        }
+
+        const frag = document.createDocumentFragment();
+
+        for (const track of tracks) {
+            const groupRaces = byTrack[track].slice().sort((a, b) =>
+                a.race_datetime > b.race_datetime ? -1 : 1
+            );
+            const stats = computeGroupStats(groupRaces);
+            const details = document.createElement("details");
+            details.className = "breakdown";
+
+            const summary = document.createElement("summary");
+            summary.innerHTML = `
+                <div class="breakdown-title">${track}</div>
+                <div class="breakdown-meta">
+                    <span>Races: <strong>${stats.total.toLocaleString()}</strong></span>
+                    <span>Avg: <strong>${stats.avg.toFixed(2)}</strong></span>
+                    <span>Best: <strong>${stats.best ?? "—"}</strong></span>
+                    <span>Worst: <strong>${stats.worst ?? "—"}</strong></span>
+                </div>
+                <div class="breakdown-chevron">▾</div>
+            `;
+
+            const content = document.createElement("div");
+            content.className = "breakdown-content";
+
+            content.innerHTML = `
+                <div class="metric-row">
+                    <div class="metric-pill">Most used car: <strong>${
+                        stats.mostCar || "—"
+                    }</strong></div>
+                </div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Car</th>
+                                <th class="text-right">Placement</th>
+                                <th class="text-right">Time</th>
+                                <th>Weather</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${groupRaces
+                                .map(
+                                    (r) => `<tr>
+                                    <td class="mono">${formatDate(r.race_datetime)}</td>
+                                    <td>${r.vehicle_name}</td>
+                                    <td class="text-right mono">${r.position}</td>
+                                    <td class="text-right mono">${r.time || "—"}</td>
+                                    <td>${r.weather}</td>
+                                </tr>`
+                                )
+                                .join("")}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            details.appendChild(summary);
+            details.appendChild(content);
+            frag.appendChild(details);
+        }
+
+        container.innerHTML = "";
+        container.appendChild(frag);
+    }
+
+    function renderCarBreakdown(races) {
+        const container = $("carBreakdown");
+        const byCar = {};
+        for (const r of races) {
+            if (!byCar[r.vehicle_name]) byCar[r.vehicle_name] = [];
+            byCar[r.vehicle_name].push(r);
+        }
+
+        const cars = Object.keys(byCar).sort((a, b) => a.localeCompare(b));
+        if (!cars.length) {
+            container.innerHTML = '<div class="section-subtitle">No cars for current filters.</div>';
+            return;
+        }
+
+        const frag = document.createDocumentFragment();
+
+        for (const car of cars) {
+            const groupRaces = byCar[car].slice().sort((a, b) =>
+                a.race_datetime > b.race_datetime ? -1 : 1
+            );
+            const stats = computeGroupStats(groupRaces);
+            const details = document.createElement("details");
+            details.className = "breakdown";
+
+            const summary = document.createElement("summary");
+            summary.innerHTML = `
+                <div class="breakdown-title">${car}</div>
+                <div class="breakdown-meta">
+                    <span>Races: <strong>${stats.total.toLocaleString()}</strong></span>
+                    <span>Avg: <strong>${stats.avg.toFixed(2)}</strong></span>
+                    <span>Best: <strong>${stats.best ?? "—"}</strong></span>
+                    <span>Worst: <strong>${stats.worst ?? "—"}</strong></span>
+                </div>
+                <div class="breakdown-chevron">▾</div>
+            `;
+
+            const content = document.createElement("div");
+            content.className = "breakdown-content";
+
+            content.innerHTML = `
+                <div class="metric-row">
+                    <div class="metric-pill">Most raced track: <strong>${
+                        stats.mostTrack || "—"
+                    }</strong></div>
+                </div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Track</th>
+                                <th class="text-right">Placement</th>
+                                <th class="text-right">Time</th>
+                                <th>Weather</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${groupRaces
+                                .map(
+                                    (r) => `<tr>
+                                    <td class="mono">${formatDate(r.race_datetime)}</td>
+                                    <td>${r.track}</td>
+                                    <td class="text-right mono">${r.position}</td>
+                                    <td class="text-right mono">${r.time || "—"}</td>
+                                    <td>${r.weather}</td>
+                                </tr>`
+                                )
+                                .join("")}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            details.appendChild(summary);
+            details.appendChild(content);
+            frag.appendChild(details);
+        }
+
+        container.innerHTML = "";
+        container.appendChild(frag);
+    }
+
+    // --- Combo analytics ---
+    function renderComboAnalytics(races) {
+        const basics = aggregateBasics(races);
+        const combos = Object.values(basics.combosDetail);
+
+        if (!combos.length) {
+            $("comboAnalytics").innerHTML =
+                '<div class="section-subtitle">No combos for current filters.</div>';
+            return;
+        }
+
+        combos.sort((a, b) => b.count - a.count);
+
+        const rows = combos
+            .map(
+                (c) => `<tr>
+                <td>${c.track}</td>
+                <td>${c.car}</td>
+                <td class="text-right mono">${c.count.toLocaleString()}</td>
+                <td class="text-right mono">${(c.sumPos / c.count).toFixed(2)}</td>
+                <td class="text-right mono">${c.best}</td>
+            </tr>`
+            )
+            .join("");
+
+        $("comboAnalytics").innerHTML = `
+            <table data-table-id="combo">
+                <thead>
+                    <tr>
+                        <th class="sortable" data-col="track">Track <span class="indicator">⇅</span></th>
+                        <th class="sortable" data-col="car">Car <span class="indicator">⇅</span></th>
+                        <th class="sortable text-right" data-col="count">Total Races <span class="indicator">⇅</span></th>
+                        <th class="sortable text-right" data-col="avg">Avg Placement <span class="indicator">⇅</span></th>
+                        <th class="sortable text-right" data-col="best">Best Finish <span class="indicator">⇅</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows}
+                </tbody>
+            </table>
+        `;
+
+        // Simple column sort behavior for combo table
+        const table = $("comboAnalytics").querySelector("table");
+        let currentSort = { col: "count", dir: "desc" };
+
+        Array.from(table.querySelectorAll("th.sortable")).forEach((th) => {
+            th.addEventListener("click", () => {
+                const col = th.getAttribute("data-col");
+                if (!col) return;
+                currentSort.dir =
+                    currentSort.col === col && currentSort.dir === "asc" ? "desc" : "asc";
+                currentSort.col = col;
+
+                const rowsArr = Array.from(table.tBodies[0].rows);
+                const colIndex = Array.from(th.parentNode.children).indexOf(th);
+                rowsArr.sort((a, b) => {
+                    const av = a.cells[colIndex].innerText;
+                    const bv = b.cells[colIndex].innerText;
+                    const numA = parseFloat(av.replace(/,/g, ""));
+                    const numB = parseFloat(bv.replace(/,/g, ""));
+
+                    let cmp;
+                    if (!Number.isNaN(numA) && !Number.isNaN(numB)) {
+                        cmp = numA - numB;
+                    } else {
+                        cmp = av.localeCompare(bv);
+                    }
+                    return currentSort.dir === "asc" ? cmp : -cmp;
+                });
+
+                const tbody = table.tBodies[0];
+                tbody.innerHTML = "";
+                rowsArr.forEach((r) => tbody.appendChild(r));
+            });
+        });
+    }
+
+    // --- Time analytics ---
+    function renderTimeAnalytics(races) {
+        const basics = aggregateBasics(races);
+        const days = basics.days;
+
+        const dayEntries = Object.entries(days).sort((a, b) =>
+            a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0
+        );
+
+        const labels = dayEntries.map((e) => e[0]);
+        const counts = dayEntries.map((e) => e[1]);
+
+        const ctx = $("activityChart").getContext("2d");
+
+        if (!chartState.activityChart) {
+            chartState.activityChart = new Chart(ctx, {
+                type: "bar",
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: "Races",
+                            data: counts,
+                            backgroundColor: "rgba(129, 140, 248, 0.8)",
+                            borderRadius: 6,
+                            maxBarThickness: 24
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                color: "#9ca3af",
+                                font: { size: labels.length > 14 ? 9 : 11 },
+                                maxRotation: 45,
+                                minRotation: 0
+                            }
+                        },
+                        y: {
+                            grid: { color: "rgba(31, 41, 55, 0.7)" },
+                            ticks: {
+                                color: "#9ca3af",
+                                font: { size: 11 },
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+        } else {
+            chartState.activityChart.data.labels = labels;
+            chartState.activityChart.data.datasets[0].data = counts;
+            chartState.activityChart.update();
+        }
+
+        // most active month
+        const monthCounts = {};
+        for (const [d, count] of dayEntries) {
+            const mk = monthKey(d);
+            monthCounts[mk] = (monthCounts[mk] || 0) + count;
+        }
+        const mkTop = topKey(monthCounts);
+        $("mostActiveMonth").textContent = mkTop ? `${niceMonthLabel(mkTop)} (${monthCounts[mkTop]})` : "—";
+
+        // Heatmap
+        const heatmap = $("activityHeatmap");
+        heatmap.innerHTML = "";
+        if (!dayEntries.length) return;
+
+        let maxCount = 0;
+        for (const [, c] of dayEntries) {
+            if (c > maxCount) maxCount = c;
+        }
+
+        const frag = document.createDocumentFragment();
+        for (const [d, c] of dayEntries) {
+            const level = c / maxCount;
+            let bucket = 1;
+            if (level > 0.75) bucket = 4;
+            else if (level > 0.5) bucket = 3;
+            else if (level > 0.25) bucket = 2;
+
+            const cell = document.createElement("div");
+            cell.className = "heat-cell";
+            cell.dataset.level = String(bucket);
+            cell.title = `${d}: ${c} race${c !== 1 ? "s" : ""}`;
+            frag.appendChild(cell);
+        }
+        heatmap.appendChild(frag);
+    }
+
+    // --- Race log ---
+    function applySearchFilter(races) {
+        const term = raceLogState.search.trim().toLowerCase();
+        if (!term) return races;
+        return races.filter((r) => {
+            const fields = [
+                String(r.race_id),
+                r.track,
+                r.vehicle_name,
+                String(r.position),
+                r.time || "",
+                r.weather,
+                r.race_datetime
+            ];
+            return fields.some((f) => f.toLowerCase().includes(term));
+        });
+    }
+
+    function renderRaceLog(races) {
+        const wrapper = $("raceLogTableWrapper");
+
+        let set = applySearchFilter(races);
+
+        const total = set.length;
+
+        // Sorting
+        const { sortKey, sortDir } = raceLogState;
+        set = set.slice().sort((a, b) => {
+            let av = a[sortKey];
+            let bv = b[sortKey];
+
+            if (sortKey === "race_id" || sortKey === "position") {
+                av = Number(av);
+                bv = Number(bv);
+                if (av === bv) return 0;
+                return sortDir === "asc" ? av - bv : bv - av;
+            }
+
+            if (sortKey === "race_datetime") {
+                if (av === bv) return 0;
+                return sortDir === "asc" ? (av < bv ? -1 : 1) : av > bv ? -1 : 1;
+            }
+
+            const sa = String(av).toLowerCase();
+            const sb = String(bv).toLowerCase();
+            if (sa === sb) return 0;
+            return sortDir === "asc" ? (sa < sb ? -1 : 1) : sa > sb ? -1 : 1;
+        });
+
+        // Pagination
+        const pageSize = raceLogState.pageSize;
+        const maxPage = Math.max(1, Math.ceil(total / pageSize));
+        raceLogState.page = Math.min(raceLogState.page, maxPage);
+        const page = Math.max(1, raceLogState.page);
+        const start = (page - 1) * pageSize;
+        const end = start + pageSize;
+        const pageItems = set.slice(start, end);
+
+        const rows = pageItems
+            .map((r) => {
+                const pos = Number(r.position);
+                let posClass = "";
+                if (pos === 1) posClass = "background:#22c55e1a;color:#bbf7d0;border-color:#22c55e;";
+                else if (pos === 2 || pos === 3) posClass = "background:#1d4ed81a;color:#bfdbfe;border-color:#1d4ed8;";
+                else posClass = "background:#020617;border-color:#111827;color:#e5e7eb;";
+
+                const weather = r.weather || "";
+                let weatherColor = "#e5e7eb";
+                if (weather.includes("RAIN")) weatherColor = "#7dd3fc";
+                else if (weather.includes("WET")) weatherColor = "#38bdf8";
+                else if (weather.includes("CLEAR")) weatherColor = "#a7f3d0";
+
+                return `<tr>
+                <td class="mono">${r.race_id}</td>
+                <td class="mono">${formatDate(r.race_datetime)}</td>
+                <td>${r.track}</td>
+                <td>${r.vehicle_name}</td>
+                <td class="text-right">
+                    <span class="mono" style="display:inline-block;padding:2px 7px;border-radius:999px;border:1px solid;${posClass}min-width:32px;text-align:center;">
+                        ${r.position}
+                    </span>
+                </td>
+                <td class="text-right mono">${r.time || "—"}</td>
+                <td>
+                    <span style="display:inline-block;padding:2px 7px;border-radius:999px;border:1px solid #111827;background:#020617;font-size:11px;color:${weatherColor};">
+                        ${weather}
+                    </span>
+                </td>
+            </tr>`;
+            })
+            .join("");
+
+        wrapper.innerHTML =
+            total === 0
+                ? '<div class="section-subtitle">No races match current filters / search.</div>'
+                : `<table id="raceLogTable">
+                    <thead>
+                        <tr>
+                            <th class="sortable" data-sort="race_id">Race ID <span class="indicator">⇅</span></th>
+                            <th class="sortable" data-sort="race_datetime">Date <span class="indicator">⇅</span></th>
+                            <th class="sortable" data-sort="track">Track <span class="indicator">⇅</span></th>
+                            <th class="sortable" data-sort="vehicle_name">Car <span class="indicator">⇅</span></th>
+                            <th class="sortable text-right" data-sort="position">Placement <span class="indicator">⇅</span></th>
+                            <th class="text-right">Time</th>
+                            <th class="sortable" data-sort="weather">Weather <span class="indicator">⇅</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
+
+        // Pagination UI
+        const from = total === 0 ? 0 : start + 1;
+        const to = total === 0 ? 0 : Math.min(end, total);
+
+        $("logPagination").innerHTML = `
+            <span>${from.toLocaleString()}–${to.toLocaleString()} of ${total.toLocaleString()}</span>
+            <button type="button" ${page === 1 ? "disabled" : ""} data-page="prev">Prev</button>
+            <button type="button" ${page >= maxPage ? "disabled" : ""} data-page="next">Next</button>
+            <span>Page ${page} of ${maxPage}</span>
+        `;
+
+        // Attach sort listeners
+        const tableEl = $("raceLogTable");
+        if (tableEl) {
+            Array.from(tableEl.querySelectorAll("th.sortable")).forEach((th) => {
+                th.addEventListener("click", () => {
+                    const key = th.getAttribute("data-sort");
+                    if (!key) return;
+                    if (raceLogState.sortKey === key) {
+                        raceLogState.sortDir = raceLogState.sortDir === "asc" ? "desc" : "asc";
+                    } else {
+                        raceLogState.sortKey = key;
+                        raceLogState.sortDir = key === "race_datetime" ? "desc" : "asc";
+                    }
+                    raceLogState.page = 1;
+                    renderRaceLog(races);
+                });
+            });
+        }
+
+        // Pagination button events
+        const pagEl = $("logPagination");
+        Array.from(pagEl.querySelectorAll("button[data-page]")).forEach((btn) => {
+            btn.addEventListener("click", () => {
+                const dir = btn.getAttribute("data-page");
+                if (dir === "prev" && raceLogState.page > 1) raceLogState.page -= 1;
+                if (dir === "next" && raceLogState.page < maxPage) raceLogState.page += 1;
+                renderRaceLog(races);
+            });
+        });
+    }
+
+    // --- Filters & dashboard render entry ---
+    function populateFilterOptions() {
+        const trackSet = new Set();
+        const carSet = new Set();
+        for (const r of allRaces) {
+            trackSet.add(r.track);
+            carSet.add(r.vehicle_name);
+        }
+
+        const trackSelect = $("filterTrack");
+        const carSelect = $("filterCar");
+
+        trackSelect.innerHTML = '<option value="">All Tracks</option>' +
+            Array.from(trackSet)
+                .sort((a, b) => a.localeCompare(b))
+                .map((t) => `<option value="${t}">${t}</option>`)
+                .join("");
+
+        carSelect.innerHTML = '<option value="">All Cars</option>' +
+            Array.from(carSet)
+                .sort((a, b) => a.localeCompare(b))
+                .map((c) => `<option value="${c}">${c}</option>`)
+                .join("");
+    }
+
+    function renderDashboard() {
+        const filtered = getFilteredRaces();
+        renderSummary(filtered);
+        renderPlacementAnalytics(filtered);
+        renderAvgPlacementTables(filtered);
+        renderTrackBreakdown(filtered);
+        renderCarBreakdown(filtered);
+        renderComboAnalytics(filtered);
+        renderTimeAnalytics(filtered);
+        raceLogState.page = 1;
+        renderRaceLog(filtered);
+    }
+
+    function resetFilters() {
+        filters.track = "";
+        filters.car = "";
+        filters.from = "";
+        filters.to = "";
+        $("filterTrack").value = "";
+        $("filterCar").value = "";
+        $("filterDateFrom").value = "";
+        $("filterDateTo").value = "";
+        renderDashboard();
+    }
+
+    function handleFileContent(text) {
+        let obj;
+        try {
+            obj = JSON.parse(text);
+        } catch (e) {
+            alert("Unable to parse JSON. Please ensure this is a valid racer_profile.json file.");
+            return;
+        }
+        if (!obj || !Array.isArray(obj.races)) {
+            alert("JSON must have a top-level 'races' array.");
+            return;
+        }
+
+        rawProfile = obj;
+        allRaces = obj.races.map((r) => ({
+            race_id: r.race_id,
+            track: r.track,
+            weather: r.weather,
+            vehicle_code: r.vehicle_code,
+            vehicle_name: r.vehicle_name,
+            race_datetime: r.race_datetime,
+            position: r.position,
+            time: r.time
+        }));
+
+        $("racerIdText").textContent = obj.racer_id || "Unknown";
+        populateFilterOptions();
+        $("uploadSection").style.display = "none";
+        $("dashboard").style.display = "block";
+        renderDashboard();
+    }
+
+    // --- Event wiring ---
+    (function init() {
+        const fileInput = $("fileInput");
+        const uploadBox = $("uploadBox");
+        const uploadButton = $("uploadButton");
+
+        uploadButton.addEventListener("click", () => fileInput.click());
+
+        fileInput.addEventListener("change", (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => handleFileContent(reader.result);
+            reader.readAsText(file);
+        });
+
+        ["dragenter", "dragover"].forEach((evt) => {
+            uploadBox.addEventListener(evt, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                uploadBox.classList.add("drag-over");
+            });
+        });
+
+        ["dragleave", "dragend", "drop"].forEach((evt) => {
+            uploadBox.addEventListener(evt, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                uploadBox.classList.remove("drag-over");
+            });
+        });
+
+        uploadBox.addEventListener("drop", (e) => {
+            const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => handleFileContent(reader.result);
+            reader.readAsText(file);
+        });
+
+        // Filter events
+        $("filterTrack").addEventListener("change", (e) => {
+            filters.track = e.target.value || "";
+            renderDashboard();
+        });
+        $("filterCar").addEventListener("change", (e) => {
+            filters.car = e.target.value || "";
+            renderDashboard();
+        });
+        $("filterDateFrom").addEventListener("change", (e) => {
+            filters.from = e.target.value || "";
+            renderDashboard();
+        });
+        $("filterDateTo").addEventListener("change", (e) => {
+            filters.to = e.target.value || "";
+            renderDashboard();
+        });
+        $("resetFiltersBtn").addEventListener("click", resetFilters);
+
+        // Race log search
+        $("logSearchInput").addEventListener("input", (e) => {
+            raceLogState.search = e.target.value || "";
+            raceLogState.page = 1;
+            renderRaceLog(getFilteredRaces());
+        });
+    })();
+</script>
+</body>
+</html>
